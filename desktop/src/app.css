@@ -81,6 +81,7 @@ pre {
 }
 .tab:hover { color: var(--accent); }
 .tab.active { color: var(--accent); background: var(--accent-wash); }
+.btn-upd { color: var(--accent); border-color: var(--accent-soft); background: var(--accent-wash); }
 
 .content { padding: 1.1rem 16px 2rem; max-width: 860px; margin: 0 auto; }
 

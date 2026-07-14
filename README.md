@@ -12,6 +12,16 @@ go run .
 # 打开 http://localhost:8090 ，首次访问会引导创建管理员
 ```
 
+日常起停用脚本（自动装 Go、后台运行、pidfile + 日志，约定同 GCMS）：
+
+```bash
+./scripts/gcrm.sh restart     # 停止 → 重新编译 → 启动；还有 start/stop/status/build/logs
+.\scripts\gcrm.ps1 restart    # Windows（PowerShell）
+./scripts/gcrm.sh pilot-build # 本地打 Pilot 桌面端安装包
+```
+
+配置可写 `scripts/gcrm.conf`（`CRM_ADDR=/`BASE_URL=`/`CRM_DB=`），环境变量优先。
+
 环境变量：
 
 | 变量 | 默认 | 说明 |
@@ -61,6 +71,8 @@ assets/            设计令牌移植自 CMS（强调色换墨绿），零外部
    行动队列工作台 + 系统级到期通知；密钥进系统钥匙串，Rust 侧代理 API
 5. ✅ CRM Pilot 进阶：托盘常驻（关窗隐藏）、本地大脑（驱动本机 Claude Code CLI
    做今日作战重点 / 赢单丢单归因 / 自定义分析，零 API 计费）
-6. GitHub Actions：CI（push/PR）、`v*` tag 发服务端全平台二进制、
+6. ✅ GitHub Actions：CI（push/PR）、`v*` tag 发服务端全平台二进制、
    `pilot-v*` tag 发桌面端（macOS dmg + Windows NSIS）
-7. 待做：Pilot 自动更新与签名公证、Codex 分析接入、MySQL / 云数据库适配
+7. ✅ Pilot 在线更新：ed25519 签名 + 滚动 `pilot-latest` 的 latest.json，
+   应用内静默检查、一键升级重启（启用步骤见 [desktop/RELEASE.md](desktop/RELEASE.md)）
+8. 待做：Apple 公证 / Windows 代码签名、Codex 分析接入、MySQL / 云数据库适配

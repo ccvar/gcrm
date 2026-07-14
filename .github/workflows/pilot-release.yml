@@ -1,7 +1,14 @@
 name: Pilot Release
 
-# 推形如 pilot-v0.2.0 的 tag：macOS（aarch64 dmg）+ Windows（NSIS exe）各自原生打包，
-# 一起发到本仓库 Release。未接 tauri updater，无需 ed25519 更新签名（对齐 GCMS 冻结方案的 v0 阶段）。
+# 推形如 pilot-v0.2.1 的 tag：macOS（aarch64 dmg）+ Windows（NSIS exe）原生打包。
+#
+# 在线更新（参考 GCMS Pilot 的冻结方案，改为同仓库承载）：
+# - 配置了 TAURI_SIGNING_PRIVATE_KEY secret 时，构建产出 ed25519 签名的更新工件
+#   （macOS .app.tar.gz + Windows -setup.exe，各带 .sig），publish 作业合成双平台
+#   latest.json，随版本发布上传，并同步到滚动 tag `pilot-latest`（应用内 updater 端点）。
+#   注意不能用 releases/latest —— 会被服务端 v* 发布（make_latest: true）顶掉，
+#   这是 GCMS 拿两个仓库分开的原因；单仓库方案用固定 tag 绕开。
+# - 未配置 secret 时优雅降级：跳过签名与 latest.json，只发 dmg / exe 安装包。
 on:
   push:
     tags:
@@ -9,6 +16,9 @@ on:
 
 permissions:
   contents: write
+
+env:
+  UPDATE_TAG: pilot-latest
 
 jobs:
   build:
@@ -49,25 +59,53 @@ jobs:
       - name: 安装前端依赖
         run: npm ci
 
-      - name: 构建
-        run: npm run tauri build -- --target ${{ matrix.target }} --bundles ${{ matrix.bundles }}
+      - name: 构建（有签名密钥则附带更新签名）
+        shell: bash
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ""
+        run: |
+          if [ -z "$TAURI_SIGNING_PRIVATE_KEY" ]; then
+            echo "::warning::未配置 TAURI_SIGNING_PRIVATE_KEY，本次发布不含在线更新工件（应用内不会提示更新）。"
+          fi
+          npm run tauri build -- --target ${{ matrix.target }} --bundles ${{ matrix.bundles }}
 
-      - name: 收集产物
+      - name: 收集产物 + 更新片段
         shell: bash
         env:
           VERSION: ${{ github.ref_name }}
           PLATFORM: ${{ matrix.platform }}
           TARGET: ${{ matrix.target }}
+          HAS_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY != '' }}
         run: |
           set -e
           ver="${VERSION#pilot-v}"
           bundle="src-tauri/target/${TARGET}/release/bundle"
           out="$GITHUB_WORKSPACE/dist"
           rm -rf "$out"; mkdir -p "$out"
+          base="https://github.com/${GITHUB_REPOSITORY}/releases/download/${VERSION}"
           if [ "$PLATFORM" = "darwin-aarch64" ]; then
             cp "$(ls "$bundle"/dmg/*.dmg | head -1)" "$out/CRM-Pilot_${ver}_aarch64.dmg"
+            if [ "$HAS_KEY" = "true" ]; then
+              cp "$(ls "$bundle"/macos/*.app.tar.gz | head -1)" "$out/CRM-Pilot_${ver}_aarch64.app.tar.gz"
+              sig=$(cat "$(ls "$bundle"/macos/*.app.tar.gz.sig | head -1)")
+              url="${base}/CRM-Pilot_${ver}_aarch64.app.tar.gz"
+            fi
           else
-            cp "$(ls "$bundle"/nsis/*-setup.exe | head -1)" "$out/CRM-Pilot_${ver}_x64-setup.exe"
+            # Tauri 2 的 Windows 更新产物就是 NSIS -setup.exe 本身（附同名 .sig）
+            if [ "$HAS_KEY" = "true" ]; then
+              sigfile=$(ls "$bundle"/nsis/*.sig | head -1)
+              signed="${sigfile%.sig}"
+              cp "$signed" "$out/CRM-Pilot_${ver}_x64-setup.exe"
+              sig=$(cat "$sigfile")
+              url="${base}/CRM-Pilot_${ver}_x64-setup.exe"
+            else
+              cp "$(ls "$bundle"/nsis/*-setup.exe | head -1)" "$out/CRM-Pilot_${ver}_x64-setup.exe"
+            fi
+          fi
+          if [ "$HAS_KEY" = "true" ]; then
+            node -e 'const fs=require("fs");const [dest,plat,url,sig]=process.argv.slice(1);fs.writeFileSync(dest,JSON.stringify({[plat]:{signature:sig,url}}))' \
+              "$out/frag-${PLATFORM}.json" "$PLATFORM" "$url" "$sig"
           fi
           ls -lh "$out"
 
@@ -78,7 +116,7 @@ jobs:
           retention-days: 1
 
   publish:
-    name: 发布 Release（两平台一起）
+    name: 发布 Release + 更新 pilot-latest
     needs: build
     runs-on: ubuntu-latest
     permissions:
@@ -89,11 +127,52 @@ jobs:
           path: all
           merge-multiple: true
 
-      - name: 发布
+      - name: 汇总产物，若有签名片段则合成 latest.json
+        env:
+          VERSION: ${{ github.ref_name }}
+        run: |
+          set -e
+          ver="${VERSION#pilot-v}"
+          out="release"; rm -rf "$out"; mkdir -p "$out"
+          find all -type f ! -name 'frag-*.json' -exec cp {} "$out/" \;
+          frags=$(find all -name 'frag-*.json' | wc -l)
+          if [ "$frags" -gt 0 ]; then
+            python3 - "$out/latest.json" "$ver" all <<'PY'
+          import sys, json, glob, datetime, pathlib
+          dest, ver, root = sys.argv[1:4]
+          platforms = {}
+          for f in sorted(glob.glob(f"{root}/**/frag-*.json", recursive=True)):
+              platforms.update(json.load(open(f)))
+          data = {
+              "version": ver,
+              "notes": f"CRM Pilot {ver}",
+              "pub_date": datetime.datetime.now(datetime.timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z"),
+              "platforms": platforms,
+          }
+          pathlib.Path(dest).write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+          PY
+            echo "=== latest.json ==="; cat "$out/latest.json"
+          else
+            echo "无签名片段，跳过 latest.json（在线更新不启用）"
+          fi
+          ls -lh "$out"
+
+      - name: 发布版本 Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ github.ref_name }}
           name: ${{ github.ref_name }}
           make_latest: false
           files: |
-            all/*
+            release/*
+
+      - name: 同步 latest.json 到滚动 ${{ env.UPDATE_TAG }}
+        if: ${{ hashFiles('release/latest.json') != '' }}
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ env.UPDATE_TAG }}
+          name: Pilot 更新通道（勿删）
+          body: 应用内 updater 的固定端点，只承载最新的 latest.json；安装包在各 pilot-v* Release。
+          make_latest: false
+          files: |
+            release/latest.json

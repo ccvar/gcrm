@@ -7,10 +7,49 @@
     requestPermission,
     sendNotification,
   } from '@tauri-apps/plugin-notification';
+  import { check as checkUpdate } from '@tauri-apps/plugin-updater';
+  import { relaunch } from '@tauri-apps/plugin-process';
   import Brain from './lib/Brain.svelte';
 
   let view = $state('loading'); // loading | setup | main
   let tab = $state('work'); // work | brain
+
+  // ---------- 在线更新 ----------
+  let updAvail = $state('');
+  let updBusy = $state(false);
+  let updMsg = $state('');
+
+  async function silentCheckUpdate() {
+    try {
+      const upd = await checkUpdate();
+      updAvail = upd ? upd.version : '';
+      if (upd) { try { await upd.close(); } catch { /* */ } } // 释放句柄，点击时再重新拉取
+    } catch { /* 离线 / 尚无 pilot-latest 发布：忽略 */ }
+  }
+
+  async function doUpdate() {
+    if (updBusy) return;
+    updBusy = true;
+    updMsg = '下载中…';
+    try {
+      const upd = await checkUpdate();
+      if (!upd) { updAvail = ''; updMsg = '已是最新版本'; return; }
+      let total = 0, got = 0;
+      await upd.downloadAndInstall((ev) => {
+        if (ev.event === 'Started') total = ev.data.contentLength ?? 0;
+        else if (ev.event === 'Progress') {
+          got += ev.data.chunkLength;
+          if (total) updMsg = `下载中 ${Math.round((got / total) * 100)}%`;
+        } else if (ev.event === 'Finished') updMsg = '安装中…';
+      });
+      updMsg = '即将重启…';
+      await relaunch();
+    } catch (e) {
+      updMsg = '更新失败：' + String(e);
+    } finally {
+      updBusy = false;
+    }
+  }
   let server = $state('http://localhost:8090');
   let apiKey = $state('');
   let setupErr = $state('');
@@ -166,6 +205,9 @@
         refresh();
       }
     });
+    // 启动静默查一次更新，之后每 6 小时再查
+    silentCheckUpdate();
+    setInterval(silentCheckUpdate, 6 * 60 * 60 * 1000);
   });
 </script>
 
@@ -217,6 +259,13 @@
       <button class="tab" class:active={tab === 'brain'} onclick={() => (tab = 'brain')}>分析</button>
     </nav>
     <span class="spacer"></span>
+    {#if updAvail}
+      <button class="btn btn-sm btn-upd" onclick={doUpdate} disabled={updBusy} title={updMsg}>
+        {updBusy ? updMsg : `更新到 ${updAvail}`}
+      </button>
+    {:else if updMsg}
+      <span class="muted small">{updMsg}</span>
+    {/if}
     {#if tab === 'work'}
       {#if lastRefresh}<span class="muted small">更新于 {lastRefresh}</span>{/if}
       <button class="btn btn-sm" onclick={refresh} disabled={loading}>{loading ? '刷新中…' : '刷新'}</button>
