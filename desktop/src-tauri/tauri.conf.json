@@ -28,7 +28,7 @@
       "endpoints": [
         "https://github.com/ccvar/gcrm/releases/download/pilot-latest/latest.json"
       ],
-      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDdERkU0OTI5NDBEQzM0NzMKUldSek5OeEFLVW4rZmI3TEEybExLQVA4VVJDQmJEeTlHVmdieUQ4MnFZYmhWek1WWkc3OFhMMnEK"
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDREQ0U2OEU1MzUzNTEyOUEKUldTYUVqVTE1V2pPVGY2SWJtZ2ZaRlVZdHFIQ0ZUM1hpZDBidGM2TVBPTXZDY0xzWVJvNmk0SmkK"
     }
   },
   "bundle": {
