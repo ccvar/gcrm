@@ -15,8 +15,10 @@
         "title": "GCRM Pilot",
         "width": 960,
         "height": 640,
-        "minWidth": 820,
-        "minHeight": 560
+        "minWidth": 760,
+        "minHeight": 540,
+        "titleBarStyle": "Overlay",
+        "hiddenTitle": true
       }
     ],
     "security": {

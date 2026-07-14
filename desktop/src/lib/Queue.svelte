@@ -104,7 +104,7 @@
 </div>
 
 <style>
-  .head { display: flex; justify-content: space-between; align-items: center; padding: 1rem 1.5rem; border-bottom: 1px solid var(--line); }
+  .head { display: flex; justify-content: space-between; align-items: center; padding: 2rem 1.5rem .9rem; border-bottom: 1px solid var(--line); }
   .head h2 { margin: 0; font-family: var(--serif); }
   .ha { display: flex; align-items: center; gap: .7rem; }
   .body { padding: 1.2rem 1.5rem; max-width: 820px; overflow-y: auto; }

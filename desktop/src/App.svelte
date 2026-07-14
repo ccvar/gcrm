@@ -16,6 +16,34 @@
   let brains = $state([]);
   let showConnect = $state(false);
 
+  // 顶栏融合：折叠侧栏、拖拽宽度、搜索
+  let railCollapsed = $state(false);
+  let railWidth = $state(loadRailWidth());
+  let showSearch = $state(false);
+  let searchQuery = $state('');
+  function loadRailWidth() {
+    const n = parseInt(localStorage.getItem('gcrm.pilot.railW') || '244', 10);
+    return isNaN(n) ? 244 : Math.min(400, Math.max(190, n));
+  }
+  function startResize(e) {
+    e.preventDefault();
+    const startX = e.clientX, startW = railWidth;
+    const onMove = (ev) => { railWidth = Math.max(190, Math.min(400, startW + ev.clientX - startX)); };
+    const onUp = () => {
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('mouseup', onUp);
+      try { localStorage.setItem('gcrm.pilot.railW', String(railWidth)); } catch { /* */ }
+    };
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+  }
+  let searchResults = $derived(
+    searchQuery.trim()
+      ? convos.filter((c) => c.title.toLowerCase().includes(searchQuery.trim().toLowerCase()))
+      : convos
+  );
+  function pickSearch(id) { showSearch = false; searchQuery = ''; openConv(id); }
+
   let connected = $derived(!!(setup.server && setup.has_key));
   let claude = $derived(brains.find((b) => b.id === 'claude'));
   let brainReady = $derived(!!(claude && claude.found && claude.logged_in));
@@ -132,8 +160,15 @@
   });
 </script>
 
-<main class="app">
-  <aside class="rail">
+<main class="app" class:rail-collapsed={railCollapsed}>
+  <!-- 融合标题栏：覆盖侧栏顶部（折叠时全宽）供拖拽；折叠/搜索按钮浮在交通灯右侧 -->
+  <div class="titlebar" data-tauri-drag-region style="width:{railCollapsed ? '100%' : railWidth + 'px'}"></div>
+  <div class="win-tools">
+    <button class="wt" onclick={() => (railCollapsed = !railCollapsed)} title={railCollapsed ? '展开侧栏' : '折叠侧栏'}>{@render icoSidebar()}</button>
+    <button class="wt" onclick={() => (showSearch = true)} title="搜索会话">{@render icoSearch()}</button>
+  </div>
+
+  <aside class="rail" style="width:{railWidth}px">
     <div class="rail-head" data-tauri-drag-region>
       <button class="navitem primary" onclick={newChat}>
         {@render icoPencil()}<span>新对话</span>
@@ -184,6 +219,8 @@
         </div>
       {/if}
     </div>
+    <!-- 右缘拖拽把手：调侧栏宽度 -->
+    <div class="rail-resize" role="separator" aria-orientation="vertical" onmousedown={startResize}></div>
   </aside>
 
   <section class="main">
@@ -204,8 +241,34 @@
       onimport={importPack}
     />
   {/if}
+
+  {#if showSearch}
+    <div class="mask" role="button" tabindex="-1" onclick={() => (showSearch = false)} onkeydown={(e) => e.key === 'Escape' && (showSearch = false)}>
+      <div class="search-box" role="dialog" tabindex="-1" onclick={(e) => e.stopPropagation()}>
+        <div class="search-in">
+          {@render icoSearch()}
+          <!-- svelte-ignore a11y_autofocus -->
+          <input type="search" bind:value={searchQuery} placeholder="搜索会话标题…" autofocus
+            onkeydown={(e) => { if (e.key === 'Enter' && searchResults[0]) pickSearch(searchResults[0].id); }} />
+        </div>
+        <div class="search-list">
+          {#each searchResults.slice(0, 30) as c (c.id)}
+            <button class="sr" onclick={() => pickSearch(c.id)}>
+              <span class="cdot g-{c.task_type}"></span>
+              <span class="ct">{c.title}</span>
+              <span class="cw">{relTime(c.updated_at)}</span>
+            </button>
+          {:else}
+            <p class="empty muted">没有匹配的会话</p>
+          {/each}
+        </div>
+      </div>
+    </div>
+  {/if}
 </main>
 
+{#snippet icoSidebar()}<svg viewBox="0 0 24 24" class="ico"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16"/></svg>{/snippet}
+{#snippet icoSearch()}<svg viewBox="0 0 24 24" class="ico"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>{/snippet}
 {#snippet icoPencil()}<svg viewBox="0 0 24 24" class="ico"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>{/snippet}
 {#snippet icoQueue()}<svg viewBox="0 0 24 24" class="ico"><path d="M9 6h11"/><path d="M9 12h11"/><path d="M9 18h11"/><path d="M4.5 6h.01"/><path d="M4.5 12h.01"/><path d="M4.5 18h.01"/></svg>{/snippet}
 {#snippet icoChevron()}<svg viewBox="0 0 24 24" class="ico"><path d="m9 18 6-6-6-6"/></svg>{/snippet}

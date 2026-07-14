@@ -138,6 +138,8 @@
 </script>
 
 <div class="chat">
+  <!-- 顶部拖拽条：主区也能拖动窗口（Overlay 标题栏下） -->
+  <div class="drag-strip" data-tauri-drag-region></div>
   <div class="stream">
     {#if showHero}
       <div class="hero">
@@ -219,8 +221,9 @@
 </div>
 
 <style>
-  .chat { display: flex; flex-direction: column; height: 100%; }
-  .stream { flex: 1; overflow-y: auto; padding: 1.2rem 0; }
+  .chat { display: flex; flex-direction: column; height: 100%; position: relative; }
+  .drag-strip { position: absolute; top: 0; left: 0; right: 0; height: 34px; z-index: 3; }
+  .stream { flex: 1; overflow-y: auto; padding: 2.4rem 0 1.2rem; }
   .hero { max-width: 680px; margin: 8vh auto 0; padding: 0 1.5rem; }
   .hero h1 { font-family: var(--serif); font-size: 1.6rem; margin: 0 0 .5rem; }
   .cards { display: grid; grid-template-columns: repeat(2, 1fr); gap: .7rem; margin-top: 1.4rem; }
