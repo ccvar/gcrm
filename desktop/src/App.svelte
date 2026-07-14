@@ -9,6 +9,8 @@
   import Chat from './lib/Chat.svelte';
   import Queue from './lib/Queue.svelte';
   import Connect from './lib/Connect.svelte';
+  import Settings from './lib/Settings.svelte';
+  import { loadPrefs, savePrefs } from './lib/prefs.js';
 
   let view = $state('chat'); // chat | queue
   let convId = $state(null);
@@ -16,6 +18,8 @@
   let setup = $state({ server: '', has_key: false, skill_dir: '', key_prefix: '' });
   let brains = $state([]);
   let showConnect = $state(false);
+  let showSettings = $state(false);
+  let prefs = $state(loadPrefs());
 
   // 顶栏融合：折叠侧栏、拖拽宽度、搜索
   let railCollapsed = $state(false);
@@ -186,6 +190,9 @@
       <button class="navitem" class:on={view === 'queue'} onclick={() => connected && (view = 'queue')} disabled={!connected} title={connected ? '' : '需连接 CRM'}>
         {@render icoQueue()}<span>行动队列</span>
       </button>
+      <button class="navitem" onclick={() => (showSettings = true)}>
+        {@render icoGear()}<span>设置</span>
+      </button>
     </div>
 
     <div class="convos">
@@ -237,7 +244,7 @@
     {#if view === 'queue'}
       <Queue {connected} />
     {:else}
-      <Chat bind:convId {connected} onchanged={refreshConvos} />
+      <Chat bind:convId {connected} customModels={prefs.customClaudeIds} onchanged={refreshConvos} />
     {/if}
   </section>
 
@@ -249,6 +256,16 @@
       onclose={() => { showConnect = false; pendingZip = null; }}
       onsaved={async () => { await refreshSetup(); showConnect = false; pendingZip = null; }}
       onimport={importPack}
+    />
+  {/if}
+
+  {#if showSettings}
+    <Settings
+      {brains}
+      bind:prefs
+      onrefreshbrains={refreshBrains}
+      onsave={() => savePrefs(prefs)}
+      onclose={() => (showSettings = false)}
     />
   {/if}
 
@@ -277,6 +294,7 @@
   {/if}
 </main>
 
+{#snippet icoGear()}<svg viewBox="0 0 24 24" class="ico"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1Z"/></svg>{/snippet}
 {#snippet icoSidebar()}<svg viewBox="0 0 24 24" class="ico"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16"/></svg>{/snippet}
 {#snippet icoSearch()}<svg viewBox="0 0 24 24" class="ico"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>{/snippet}
 {#snippet icoPencil()}<svg viewBox="0 0 24 24" class="ico"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>{/snippet}

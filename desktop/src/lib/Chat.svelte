@@ -4,6 +4,7 @@
   import { getCurrentWindow } from '@tauri-apps/api/window';
   import { mdRender, mdClick } from './md.js';
   import ModelChip from './ModelChip.svelte';
+  import { loadPrefs, savePrefs } from './prefs.js';
 
   function startDrag(e) {
     if (e.button !== 0) return;
@@ -14,6 +15,7 @@
   let {
     convId = $bindable(null), // 当前会话 id，null = 新对话
     connected = false,
+    customModels = [], // 设置里配置的自定义模型 ID
     onchanged = () => {}, // 会话增改后通知父组件刷新侧栏
   } = $props();
 
@@ -26,9 +28,11 @@
   let err = $state('');
   let draft = $state('');
   let taskType = $state('free');
-  let permMode = $state('plan');
-  let model = $state('');
-  let effort = $state('');
+  // 新对话默认沿用上次选的模型/强度/权限（存 localStorage）
+  const _p = loadPrefs();
+  let permMode = $state(_p.perm || 'plan');
+  let model = $state(_p.model || '');
+  let effort = $state(_p.effort || '');
 
   const TASK_CARDS = [
     { id: 'prospect', label: '找客户', desc: '联网找潜在客户，确认后导入 CRM' },
@@ -79,6 +83,8 @@
     pendingUser = text;
     const startedFromNew = !convId;
     runConvId = convId; // 续轮已知；首轮等 Started 回填
+    // 记住这次选的模型/强度/权限，作为下次新对话默认（不动自定义模型列表）
+    savePrefs({ ...loadPrefs(), model, effort, perm: permMode });
 
     let closed = false;
     const ch = new Channel();
@@ -220,7 +226,7 @@
           </select>
           <svg class="pchev" viewBox="0 0 12 12"><path d="M3 4.5 6 7.5 9 4.5" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
         </div>
-        <ModelChip bind:model bind:effort lock={running} />
+        <ModelChip bind:model bind:effort lock={running} {customModels} />
       </div>
       <div class="br">
         {#if running}

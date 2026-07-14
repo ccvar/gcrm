@@ -5,13 +5,18 @@
     model = $bindable(''),
     effort = $bindable(''),
     lock = false, // 运行中锁模型（强度仍可调，下轮生效）
+    customModels = [], // 用户在设置里配置的自定义 Claude 模型 ID
   } = $props();
 
-  const MODELS = [
+  const PRESETS = [
     { value: '', label: 'Sonnet', sub: '默认 · 均衡' },
     { value: 'opus', label: 'Opus', sub: '最强 · 更慢' },
     { value: 'haiku', label: 'Haiku', sub: '最快最省' },
   ];
+  const MODELS = $derived([
+    ...PRESETS,
+    ...customModels.map((id) => ({ value: id, label: id, sub: '自定义' })),
+  ]);
   const EFFORTS = [
     { value: '', label: '标准' },
     { value: 'low', label: '低' },
