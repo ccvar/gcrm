@@ -69,7 +69,9 @@ fn fix_windows() {
             .args([
                 "-NoProfile",
                 "-Command",
-                &format!("[Environment]::GetEnvironmentVariable('Path','{scope}')"),
+                // 先切 UTF-8 输出再打印：PowerShell 5.1 管道输出默认走 OEM 代码页（中文系统
+                // GBK），按 UTF-8 解码会把含中文的 PATH（如 C:\Users\张三\.local\bin）变乱码
+                &format!("[Console]::OutputEncoding=[Text.Encoding]::UTF8; [Environment]::GetEnvironmentVariable('Path','{scope}')"),
             ])
             .creation_flags(0x0800_0000) // CREATE_NO_WINDOW：别在启动/重检时闪黑窗
             .output()

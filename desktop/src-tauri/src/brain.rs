@@ -190,9 +190,13 @@ pub fn open_brain_login(app: AppHandle, brain: String) -> Result<(), String> {
         let mut bytes = vec![0xEF, 0xBB, 0xBF];
         bytes.extend_from_slice(script.as_bytes());
         std::fs::write(&file, bytes).map_err(|e| e.to_string())?;
+        // 中转 cmd 自身不弹窗（否则授权窗口前先闪一个空黑窗）；start 仍会为
+        // powershell 开一个可见的新控制台，授权交互不受影响
+        use std::os::windows::process::CommandExt;
         std::process::Command::new("cmd")
             .args(["/c", "start", "", "powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File"])
             .arg(&file)
+            .creation_flags(0x0800_0000)
             .spawn()
             .map_err(|e| e.to_string())?;
     }
@@ -366,12 +370,12 @@ async fn run_analysis_inner(
         _ = &mut *kill_rx => return Err("已停止".into()),
     };
 
+    // prompt 走 stdin 而非 argv：Windows 上 npm 装的是 claude.cmd，Rust std（CVE-2024-24576
+    // 修复后）对 .cmd 参数含换行直接拒绝；且内嵌数据的 prompt 轻松超过 32K 命令行上限。
     let claude = resolve_bin("claude");
     let mut cmd = tokio::process::Command::new(&claude);
-    cmd.arg("-p")
-        .arg(&prompt)
-        .args(["--output-format", "stream-json", "--verbose", "--include-partial-messages"])
-        .stdin(std::process::Stdio::null())
+    cmd.args(["-p", "--output-format", "stream-json", "--verbose", "--include-partial-messages"])
+        .stdin(std::process::Stdio::piped())
         .stdout(std::process::Stdio::piped())
         .stderr(std::process::Stdio::piped())
         .kill_on_drop(true);
@@ -384,6 +388,14 @@ async fn run_analysis_inner(
         .spawn()
         .map_err(|e| format!("启动 claude 失败（确认已安装并登录）: {e}"))?;
     let pid = child.id();
+    if let Some(mut si) = child.stdin.take() {
+        // 独立任务写入防死锁：主流程不能在读 stdout 前阻塞在写满的管道上
+        tauri::async_runtime::spawn(async move {
+            use tokio::io::AsyncWriteExt;
+            let _ = si.write_all(prompt.as_bytes()).await;
+            let _ = si.shutdown().await; // 关流，claude 才知道 prompt 结束
+        });
+    }
     if let Ok(mut guard) = state.0.lock() {
         if let Some(h) = guard.as_mut() {
             h.pid = pid;
