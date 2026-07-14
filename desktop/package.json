@@ -1,7 +1,7 @@
 {
   "name": "crm-pilot",
   "private": true,
-  "version": "0.2.1",
+  "version": "0.2.2",
   "description": "CCVAR CRM 转化驾驶舱桌面端",
   "type": "module",
   "scripts": {
