@@ -38,8 +38,10 @@ pub struct Conversation {
     pub title: String,
     pub brain: String,     // claude（codex 暂未接执行）
     pub model: String,     // 空 = CLI 默认
+    #[serde(default)]
+    pub effort: String,    // 思考强度：'' / medium / high → MAX_THINKING_TOKENS
     pub perm_mode: String, // plan（只读）/ full（全自动）
-    pub task_type: String, // focus / review / free
+    pub task_type: String, // prospect / focus / review / free
     /// 是否绑定 CRM 连接（false = 独立模式，纯本地大脑对话）
     #[serde(default)]
     pub connected: bool,

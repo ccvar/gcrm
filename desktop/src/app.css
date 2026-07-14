@@ -51,17 +51,20 @@ pre, input, textarea, .mdbody, .ubody { user-select: text; cursor: auto; }
 .app { display: flex; height: 100vh; overflow: hidden; position: relative; }
 
 /* 融合标题栏：透明覆盖侧栏顶部，供拖拽窗口（Overlay 标题栏 + 交通灯浮在其上） */
-.titlebar { position: absolute; top: 0; left: 0; height: 40px; z-index: 5; }
+.titlebar { position: fixed; top: 0; left: 0; height: 30px; z-index: 6; }
 .win-tools {
-  position: absolute; top: 9px; left: 82px; z-index: 6;
-  display: flex; gap: .2rem;
+  position: fixed; top: 0; left: 80px; height: 30px; z-index: 8;
+  display: flex; align-items: center; gap: 1px;
 }
 .wt {
   display: inline-flex; align-items: center; justify-content: center;
-  width: 26px; height: 24px; border: 0; border-radius: 6px;
+  width: 27px; height: 24px; border: 0; border-radius: 6px;
   background: transparent; color: var(--muted); cursor: pointer; transition: all .15s;
+  -webkit-app-region: no-drag;
 }
 .wt:hover { background: var(--line-soft); color: var(--accent); }
+.wt:disabled { opacity: .4; cursor: default; }
+.wt:disabled:hover { background: transparent; color: var(--muted); }
 .wt .ico { width: 16px; height: 16px; }
 
 .rail {

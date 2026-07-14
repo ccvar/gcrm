@@ -1,9 +1,16 @@
 <script>
   import { onMount } from 'svelte';
   import { invoke } from '@tauri-apps/api/core';
+  import { getCurrentWindow } from '@tauri-apps/api/window';
   import {
     isPermissionGranted, requestPermission, sendNotification,
   } from '@tauri-apps/plugin-notification';
+
+  function startDrag(e) {
+    if (e.button !== 0) return;
+    if (e.target.closest('button, a, input, textarea, select, [role="button"]')) return;
+    getCurrentWindow().startDragging().catch(() => {});
+  }
 
   let { connected = false } = $props();
   let tasks = $state([]);
@@ -74,7 +81,7 @@
   onMount(() => { refresh(); const i = setInterval(refresh, 5 * 60 * 1000); return () => clearInterval(i); });
 </script>
 
-<header class="head" data-tauri-drag-region>
+<header class="head" data-tauri-drag-region onmousedown={startDrag}>
   <div><h2>今日行动</h2></div>
   <div class="ha">
     {#if lastRefresh}<span class="muted small">更新于 {lastRefresh}</span>{/if}

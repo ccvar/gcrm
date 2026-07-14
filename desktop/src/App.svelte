@@ -2,6 +2,7 @@
   import { onMount } from 'svelte';
   import { invoke } from '@tauri-apps/api/core';
   import { listen } from '@tauri-apps/api/event';
+  import { getCurrentWindow } from '@tauri-apps/api/window';
   import { open as openDialog } from '@tauri-apps/plugin-dialog';
   import { check as checkUpdate } from '@tauri-apps/plugin-updater';
   import { relaunch } from '@tauri-apps/plugin-process';
@@ -43,6 +44,15 @@
       : convos
   );
   function pickSearch(id) { showSearch = false; searchQuery = ''; openConv(id); }
+
+  // 拖动窗口：Overlay 标题栏下靠 JS 主动 startDragging（data-tauri-drag-region 单独不够可靠）；
+  // 落在按钮/输入等交互元素上则不拖，交给它们自己。
+  function startDrag(e) {
+    if (e.button !== 0) return;
+    const t = e.target;
+    if (t.closest('button, a, input, textarea, select, [role="button"], [data-no-drag]')) return;
+    getCurrentWindow().startDragging().catch(() => {});
+  }
 
   let connected = $derived(!!(setup.server && setup.has_key));
   let claude = $derived(brains.find((b) => b.id === 'claude'));
@@ -161,8 +171,8 @@
 </script>
 
 <main class="app" class:rail-collapsed={railCollapsed}>
-  <!-- 融合标题栏：覆盖侧栏顶部（折叠时全宽）供拖拽；折叠/搜索按钮浮在交通灯右侧 -->
-  <div class="titlebar" data-tauri-drag-region style="width:{railCollapsed ? '100%' : railWidth + 'px'}"></div>
+  <!-- 融合标题栏：覆盖侧栏顶部供拖拽窗口；折叠/搜索按钮浮在交通灯右侧 -->
+  <div class="titlebar" data-tauri-drag-region aria-hidden="true" onmousedown={startDrag} style="width:{railCollapsed ? 150 : railWidth}px"></div>
   <div class="win-tools">
     <button class="wt" onclick={() => (railCollapsed = !railCollapsed)} title={railCollapsed ? '展开侧栏' : '折叠侧栏'}>{@render icoSidebar()}</button>
     <button class="wt" onclick={() => (showSearch = true)} title="搜索会话">{@render icoSearch()}</button>

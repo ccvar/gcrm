@@ -1,7 +1,14 @@
 <script>
   import { invoke, Channel } from '@tauri-apps/api/core';
   import { openUrl } from '@tauri-apps/plugin-opener';
+  import { getCurrentWindow } from '@tauri-apps/api/window';
   import { mdRender, mdClick } from './md.js';
+
+  function startDrag(e) {
+    if (e.button !== 0) return;
+    if (e.target.closest('button, a, input, textarea, select, [role="button"], [data-no-drag]')) return;
+    getCurrentWindow().startDragging().catch(() => {});
+  }
 
   let {
     convId = $bindable(null), // 当前会话 id，null = 新对话
@@ -20,6 +27,19 @@
   let taskType = $state('free');
   let permMode = $state('plan');
   let model = $state('');
+  let effort = $state('');
+
+  // Claude 模型（CLI 别名，空=默认 Sonnet）+ 思考强度（映射 MAX_THINKING_TOKENS）
+  const MODELS = [
+    { value: '', label: 'Sonnet' },
+    { value: 'opus', label: 'Opus' },
+    { value: 'haiku', label: 'Haiku' },
+  ];
+  const EFFORTS = [
+    { value: '', label: '标准思考' },
+    { value: 'medium', label: '中度思考' },
+    { value: 'high', label: '深度思考' },
+  ];
 
   const TASK_CARDS = [
     { id: 'prospect', label: '找客户', desc: '联网找潜在客户，确认后导入 CRM' },
@@ -49,7 +69,7 @@
       // 若期间又切走了，丢弃这次结果
       if (convId !== id) return;
       conv = c;
-      if (c && !running) { taskType = c.task_type; permMode = c.perm_mode; model = c.model; }
+      if (c && !running) { taskType = c.task_type; permMode = c.perm_mode; model = c.model; effort = c.effort || ''; }
     });
   });
 
@@ -96,6 +116,7 @@
         model: model || null,
         permMode,
         taskType,
+        effort: effort || null,
         onEvent: ch,
       });
       // 仅当用户仍停留在这条会话时才把结果贴上视图（避免切走后被旧回合覆盖）
@@ -139,7 +160,7 @@
 
 <div class="chat">
   <!-- 顶部拖拽条：主区也能拖动窗口（Overlay 标题栏下） -->
-  <div class="drag-strip" data-tauri-drag-region></div>
+  <div class="drag-strip" data-tauri-drag-region onmousedown={startDrag}></div>
   <div class="stream">
     {#if showHero}
       <div class="hero">
@@ -201,13 +222,18 @@
       placeholder={taskType === 'prospect' ? '例如：帮我找长三角做新能源电池的中型制造企业，要采购负责人的公开联系方式' : (showHero ? '像聊天一样说清楚你的需求' : '继续问…')}></textarea>
     <div class="bar">
       <div class="bl">
-        {#if showHero}
-          <select bind:value={permMode} title="权限">
-            {#each PERM as p (p.id)}<option value={p.id}>{p.label}</option>{/each}
-          </select>
-        {:else}
-          <span class="ro">{conv?.task_type === 'prospect' ? '找客户' : conv?.task_type === 'focus' ? '今日作战' : conv?.task_type === 'review' ? '复盘归因' : '自由对话'} · {PERM.find(p => p.id === conv?.perm_mode)?.label || '只读'}</span>
+        {#if !showHero}
+          <span class="ro">{conv?.task_type === 'prospect' ? '找客户' : conv?.task_type === 'focus' ? '今日作战' : conv?.task_type === 'review' ? '复盘归因' : '自由对话'}</span>
         {/if}
+        <select class="chip" bind:value={permMode} title="权限档位">
+          {#each PERM as p (p.id)}<option value={p.id}>{p.label}</option>{/each}
+        </select>
+        <select class="chip" bind:value={model} title="模型">
+          {#each MODELS as m (m.value)}<option value={m.value}>{m.label}</option>{/each}
+        </select>
+        <select class="chip" bind:value={effort} title="思考强度">
+          {#each EFFORTS as ef (ef.value)}<option value={ef.value}>{ef.label}</option>{/each}
+        </select>
       </div>
       <div class="br">
         {#if running}
@@ -222,8 +248,8 @@
 
 <style>
   .chat { display: flex; flex-direction: column; height: 100%; position: relative; }
-  .drag-strip { position: absolute; top: 0; left: 0; right: 0; height: 34px; z-index: 3; }
-  .stream { flex: 1; overflow-y: auto; padding: 2.4rem 0 1.2rem; }
+  .drag-strip { position: absolute; top: 0; left: 0; right: 0; height: 30px; z-index: 3; }
+  .stream { flex: 1; overflow-y: auto; padding: 2.2rem 0 1.2rem; }
   .hero { max-width: 680px; margin: 8vh auto 0; padding: 0 1.5rem; }
   .hero h1 { font-family: var(--serif); font-size: 1.6rem; margin: 0 0 .5rem; }
   .cards { display: grid; grid-template-columns: repeat(2, 1fr); gap: .7rem; margin-top: 1.4rem; }
@@ -257,9 +283,11 @@
   .composer { flex: none; border-top: 1px solid var(--line); background: var(--surface); padding: .7rem 1.5rem 1rem; }
   .composer textarea { width: 100%; max-width: 760px; margin: 0 auto; display: block; resize: none; border: 1px solid var(--line); border-radius: 10px; padding: .6rem .8rem; font: inherit; background: var(--bg); color: var(--ink); max-height: 200px; }
   .composer textarea:focus { outline: none; border-color: var(--accent-soft); }
-  .bar { max-width: 760px; margin: .5rem auto 0; display: flex; justify-content: space-between; align-items: center; }
-  .bl select { font: inherit; font-size: .85rem; border: 1px solid var(--line); border-radius: 7px; padding: .25rem .5rem; background: var(--surface); color: var(--ink); }
-  .ro { font-size: .82rem; color: var(--muted); }
+  .bar { max-width: 760px; margin: .5rem auto 0; display: flex; justify-content: space-between; align-items: center; gap: .5rem; }
+  .bl { display: flex; align-items: center; gap: .4rem; flex-wrap: wrap; }
+  .chip { font: inherit; font-size: .82rem; border: 1px solid var(--line); border-radius: 7px; padding: .22rem .45rem; background: var(--surface); color: var(--ink-soft); cursor: pointer; }
+  .chip:hover { border-color: var(--accent-soft); }
+  .ro { font-size: .82rem; color: var(--muted); padding-right: .1rem; }
   .send { width: 34px; height: 34px; border-radius: 50%; border: 0; background: var(--accent); color: #fff; font-size: 1rem; cursor: pointer; }
   .send:disabled { opacity: .4; cursor: default; }
   .send.stop { background: var(--danger); }

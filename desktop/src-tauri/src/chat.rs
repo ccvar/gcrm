@@ -170,6 +170,7 @@ pub async fn send_chat(
     model: Option<String>,
     perm_mode: Option<String>,
     task_type: Option<String>,
+    effort: Option<String>,
     on_event: Channel<TurnEvent>,
 ) -> Result<ChatOut, String> {
     let text = text.trim().to_string();
@@ -192,6 +193,7 @@ pub async fn send_chat(
                 title: convo::title_from(&text),
                 brain,
                 model: model.clone().unwrap_or_default(),
+                effort: effort.clone().unwrap_or_default(),
                 perm_mode: perm_mode.clone().unwrap_or_else(|| "plan".into()),
                 task_type: task_type.unwrap_or_else(|| "free".into()),
                 connected,
@@ -233,6 +235,9 @@ pub async fn send_chat(
     }
     if let Some(m) = model {
         conv.model = m;
+    }
+    if let Some(ef) = effort {
+        conv.effort = ef;
     }
 
     // ---- 注册取消句柄 ----
@@ -325,6 +330,12 @@ async fn run_claude_turn(
     }
     for f in perm_flags(&conv.perm_mode) {
         cmd.arg(f);
+    }
+    // 思考强度 → MAX_THINKING_TOKENS（同 GCMS）；空则跟随模型默认
+    match conv.effort.as_str() {
+        "medium" => { cmd.env("MAX_THINKING_TOKENS", "16384"); }
+        "high" => { cmd.env("MAX_THINKING_TOKENS", "32000"); }
+        _ => {}
     }
 
     // 连接模式：cwd = 技能包目录（若有），注入 CRM_BASE_URL / CRM_API_KEY
