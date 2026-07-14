@@ -3,6 +3,7 @@
   import { openUrl } from '@tauri-apps/plugin-opener';
   import { getCurrentWindow } from '@tauri-apps/api/window';
   import { mdRender, mdClick } from './md.js';
+  import ModelChip from './ModelChip.svelte';
 
   function startDrag(e) {
     if (e.button !== 0) return;
@@ -28,18 +29,6 @@
   let permMode = $state('plan');
   let model = $state('');
   let effort = $state('');
-
-  // Claude 模型（CLI 别名，空=默认 Sonnet）+ 思考强度（映射 MAX_THINKING_TOKENS）
-  const MODELS = [
-    { value: '', label: 'Sonnet' },
-    { value: 'opus', label: 'Opus' },
-    { value: 'haiku', label: 'Haiku' },
-  ];
-  const EFFORTS = [
-    { value: '', label: '标准思考' },
-    { value: 'medium', label: '中度思考' },
-    { value: 'high', label: '深度思考' },
-  ];
 
   const TASK_CARDS = [
     { id: 'prospect', label: '找客户', desc: '联网找潜在客户，确认后导入 CRM' },
@@ -225,15 +214,13 @@
         {#if !showHero}
           <span class="ro">{conv?.task_type === 'prospect' ? '找客户' : conv?.task_type === 'focus' ? '今日作战' : conv?.task_type === 'review' ? '复盘归因' : '自由对话'}</span>
         {/if}
-        <select class="chip" bind:value={permMode} title="权限档位">
-          {#each PERM as p (p.id)}<option value={p.id}>{p.label}</option>{/each}
-        </select>
-        <select class="chip" bind:value={model} title="模型">
-          {#each MODELS as m (m.value)}<option value={m.value}>{m.label}</option>{/each}
-        </select>
-        <select class="chip" bind:value={effort} title="思考强度">
-          {#each EFFORTS as ef (ef.value)}<option value={ef.value}>{ef.label}</option>{/each}
-        </select>
+        <div class="permchip" data-perm={permMode} data-no-drag>
+          <select bind:value={permMode} title="权限档位">
+            {#each PERM as p (p.id)}<option value={p.id}>{p.label}</option>{/each}
+          </select>
+          <svg class="pchev" viewBox="0 0 12 12"><path d="M3 4.5 6 7.5 9 4.5" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </div>
+        <ModelChip bind:model bind:effort lock={running} />
       </div>
       <div class="br">
         {#if running}
@@ -285,9 +272,19 @@
   .composer textarea:focus { outline: none; border-color: var(--accent-soft); }
   .bar { max-width: 760px; margin: .5rem auto 0; display: flex; justify-content: space-between; align-items: center; gap: .5rem; }
   .bl { display: flex; align-items: center; gap: .4rem; flex-wrap: wrap; }
-  .chip { font: inherit; font-size: .82rem; border: 1px solid var(--line); border-radius: 7px; padding: .22rem .45rem; background: var(--surface); color: var(--ink-soft); cursor: pointer; }
-  .chip:hover { border-color: var(--accent-soft); }
   .ro { font-size: .82rem; color: var(--muted); padding-right: .1rem; }
+
+  /* 权限 chip：原生 select 套壳成 chip，按风险上色（可写=暖橙提示） */
+  .permchip { position: relative; display: inline-flex; align-items: center; height: 26px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); color: var(--ink-soft); }
+  .permchip:hover { border-color: var(--accent-soft); }
+  .permchip select {
+    appearance: none; -webkit-appearance: none;
+    border: 0; background: transparent; font: inherit; font-size: 12px; font-weight: 500; color: inherit;
+    padding: 0 20px 0 8px; height: 100%; cursor: pointer;
+  }
+  .permchip select:focus { outline: none; }
+  .pchev { position: absolute; right: 6px; width: 10px; height: 10px; opacity: .55; pointer-events: none; }
+  .permchip[data-perm="full"] { color: #c0863a; border-color: color-mix(in srgb, #c0863a 40%, var(--line)); }
   .send { width: 34px; height: 34px; border-radius: 50%; border: 0; background: var(--accent); color: #fff; font-size: 1rem; cursor: pointer; }
   .send:disabled { opacity: .4; cursor: default; }
   .send.stop { background: var(--danger); }
