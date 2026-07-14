@@ -146,13 +146,16 @@ pre, input, textarea, .mdbody, .ubody { user-select: text; cursor: auto; }
 .dot2 { width: 7px; height: 7px; border-radius: 50%; background: var(--faint); flex: none; }
 .dot2.live { background: var(--ok); }
 .cbtext { flex: 1; text-align: left; }
-.cbhint { color: var(--faint); }
+.cbhint { display: inline-flex; color: var(--faint); }
+.cbhint .ico { width: 15px; height: 15px; }
+.connbar:hover .cbhint { color: var(--accent); }
 .updbtn {
   width: 100%; font: inherit; font-size: .8rem; color: var(--accent);
   background: var(--accent-wash); border: 1px solid var(--accent-soft);
   border-radius: 8px; padding: .35rem; cursor: pointer; margin-bottom: .4rem;
 }
-.warnbar { font-size: .76rem; color: var(--danger); padding: .4rem .55rem; }
+.warnbar { display: block; width: 100%; text-align: left; font: inherit; font-size: .76rem; color: var(--danger); background: none; border: 0; padding: .4rem .55rem; cursor: pointer; }
+.warnbar:hover { text-decoration: underline; }
 .link { font: inherit; font-size: .76rem; color: var(--accent); background: none; border: 0; cursor: pointer; padding: 0; text-decoration: underline; }
 
 .main { flex: 1; min-width: 0; display: flex; flex-direction: column; overflow: hidden; }

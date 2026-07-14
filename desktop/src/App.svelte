@@ -8,7 +8,6 @@
   import { relaunch } from '@tauri-apps/plugin-process';
   import Chat from './lib/Chat.svelte';
   import Queue from './lib/Queue.svelte';
-  import Connect from './lib/Connect.svelte';
   import Settings from './lib/Settings.svelte';
   import { loadPrefs, savePrefs } from './lib/prefs.js';
 
@@ -17,7 +16,6 @@
   let convos = $state([]);
   let setup = $state({ server: '', has_key: false, skill_dir: '', key_prefix: '' });
   let brains = $state([]);
-  let showConnect = $state(false);
   let showSettings = $state(false);
   let prefs = $state(loadPrefs());
 
@@ -154,12 +152,13 @@
       if (!path) return;
       const out = await invoke('import_pack', { zipPath: path, key: null });
       if (out.status === 'needs_key') {
-        showConnect = true; // Connect 组件里会带 pendingZip 提示粘贴密钥
+        // 抽屉里提示粘贴密钥
         pendingZip = path;
         pendingBase = out.api_base;
       } else {
         await refreshSetup();
-        showConnect = false;
+        pendingZip = null;
+        pendingBase = '';
       }
     } catch (e) { alert('导入失败：' + e); }
   }
@@ -190,9 +189,6 @@
       <button class="navitem" class:on={view === 'queue'} onclick={() => connected && (view = 'queue')} disabled={!connected} title={connected ? '' : '需连接 CRM'}>
         {@render icoQueue()}<span>行动队列</span>
       </button>
-      <button class="navitem" onclick={() => (showSettings = true)}>
-        {@render icoGear()}<span>设置</span>
-      </button>
     </div>
 
     <div class="convos">
@@ -222,18 +218,17 @@
       {#if updAvail}
         <button class="updbtn" onclick={doUpdate} disabled={updBusy}>{updBusy ? updMsg : `更新到 ${updAvail}`}</button>
       {/if}
-      <button class="connbar" onclick={() => (showConnect = true)}>
+      <button class="connbar" onclick={() => (showSettings = true)} title="设置">
         <span class="dot2" class:live={connected}></span>
         <span class="cbtext">
           {#if connected}已连接 CRM{:else}未连接 · 独立模式{/if}
         </span>
-        <span class="cbhint">⚙</span>
+        <span class="cbhint">{@render icoGear()}</span>
       </button>
       {#if !brainReady}
-        <div class="warnbar">
-          {#if !claude?.found}未检测到 Claude CLI{:else if !claude?.logged_in}Claude 未登录 · <button class="link" onclick={() => invoke('open_brain_login', { brain: 'claude' })}>去授权</button>{/if}
-          <button class="link" onclick={refreshBrains}>重新检测</button>
-        </div>
+        <button class="warnbar" onclick={() => (showSettings = true)}>
+          {#if !claude?.found}未检测到 Claude CLI · 去设置{:else if !claude?.logged_in}Claude 未登录 · 去授权{/if}
+        </button>
       {/if}
     </div>
     <!-- 右缘拖拽把手：调侧栏宽度 -->
@@ -248,24 +243,18 @@
     {/if}
   </section>
 
-  {#if showConnect}
-    <Connect
-      {setup}
-      {pendingZip}
-      {pendingBase}
-      onclose={() => { showConnect = false; pendingZip = null; }}
-      onsaved={async () => { await refreshSetup(); showConnect = false; pendingZip = null; }}
-      onimport={importPack}
-    />
-  {/if}
-
   {#if showSettings}
     <Settings
+      {setup}
       {brains}
       bind:prefs
+      {pendingZip}
+      {pendingBase}
       onrefreshbrains={refreshBrains}
+      onrefreshsetup={async () => { await refreshSetup(); pendingZip = null; pendingBase = ''; }}
+      onimport={importPack}
       onsave={() => savePrefs(prefs)}
-      onclose={() => (showSettings = false)}
+      onclose={() => { showSettings = false; pendingZip = null; pendingBase = ''; }}
     />
   {/if}
 
