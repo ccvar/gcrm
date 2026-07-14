@@ -1,8 +1,8 @@
 {
-  "name": "crm-pilot",
+  "name": "gcrm-pilot",
   "private": true,
-  "version": "0.2.2",
-  "description": "CCVAR CRM 转化驾驶舱桌面端",
+  "version": "0.3.0",
+  "description": "GCRM 转化驾驶舱桌面端",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -13,9 +13,13 @@
   "license": "MIT",
   "dependencies": {
     "@tauri-apps/api": "^2",
+    "@tauri-apps/plugin-dialog": "^2.7.1",
     "@tauri-apps/plugin-notification": "^2",
+    "@tauri-apps/plugin-opener": "^2.5.4",
     "@tauri-apps/plugin-process": "^2.3.1",
-    "@tauri-apps/plugin-updater": "^2.10.1"
+    "@tauri-apps/plugin-updater": "^2.10.1",
+    "dompurify": "^3.4.12",
+    "marked": "^18.0.6"
   },
   "devDependencies": {
     "@sveltejs/vite-plugin-svelte": "^5.0.0",

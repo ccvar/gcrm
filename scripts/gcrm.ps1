@@ -1,6 +1,6 @@
 <#
 =============================================================================
- CCVAR CRM —— 启停脚本（Windows / PowerShell，约定与 GCMS 的 cms.ps1 一致）
+ GCRM —— 启停脚本（Windows / PowerShell，约定与 GCMS 的 cms.ps1 一致）
 
    用法：  .\scripts\gcrm.ps1 <命令>
    命令：  start | stop | restart | status | build | logs | pilot-build

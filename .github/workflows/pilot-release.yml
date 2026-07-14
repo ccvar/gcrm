@@ -90,22 +90,22 @@ jobs:
           rm -rf "$out"; mkdir -p "$out"
           base="https://github.com/${GITHUB_REPOSITORY}/releases/download/${VERSION}"
           if [ "$PLATFORM" = "darwin-aarch64" ]; then
-            cp "$(ls "$bundle"/dmg/*.dmg | head -1)" "$out/CRM-Pilot_${ver}_aarch64.dmg"
+            cp "$(ls "$bundle"/dmg/*.dmg | head -1)" "$out/GCRM-Pilot_${ver}_aarch64.dmg"
             if [ "$HAS_KEY" = "true" ]; then
-              cp "$(ls "$bundle"/macos/*.app.tar.gz | head -1)" "$out/CRM-Pilot_${ver}_aarch64.app.tar.gz"
+              cp "$(ls "$bundle"/macos/*.app.tar.gz | head -1)" "$out/GCRM-Pilot_${ver}_aarch64.app.tar.gz"
               sig=$(cat "$(ls "$bundle"/macos/*.app.tar.gz.sig | head -1)")
-              url="${base}/CRM-Pilot_${ver}_aarch64.app.tar.gz"
+              url="${base}/GCRM-Pilot_${ver}_aarch64.app.tar.gz"
             fi
           else
             # Tauri 2 的 Windows 更新产物就是 NSIS -setup.exe 本身（附同名 .sig）
             if [ "$HAS_KEY" = "true" ]; then
               sigfile=$(ls "$bundle"/nsis/*.sig | head -1)
               signed="${sigfile%.sig}"
-              cp "$signed" "$out/CRM-Pilot_${ver}_x64-setup.exe"
+              cp "$signed" "$out/GCRM-Pilot_${ver}_x64-setup.exe"
               sig=$(cat "$sigfile")
-              url="${base}/CRM-Pilot_${ver}_x64-setup.exe"
+              url="${base}/GCRM-Pilot_${ver}_x64-setup.exe"
             else
-              cp "$(ls "$bundle"/nsis/*-setup.exe | head -1)" "$out/CRM-Pilot_${ver}_x64-setup.exe"
+              cp "$(ls "$bundle"/nsis/*-setup.exe | head -1)" "$out/GCRM-Pilot_${ver}_x64-setup.exe"
             fi
           fi
           if [ "$HAS_KEY" = "true" ]; then
@@ -150,7 +150,7 @@ jobs:
               platforms.update(json.load(open(f)))
           data = {
               "version": ver,
-              "notes": f"CRM Pilot {ver}",
+              "notes": f"GCRM Pilot {ver}",
               "pub_date": datetime.datetime.now(datetime.timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z"),
               "platforms": platforms,
           }

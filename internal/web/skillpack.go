@@ -44,7 +44,7 @@ func (s *Server) skillPackDownload(w http.ResponseWriter, r *http.Request) {
 
 func skillPackReadme(base string) string {
 	return strings.Join([]string{
-		"# CCVAR CRM 助手技能包",
+		"# GCRM 助手技能包",
 		"",
 		"这个包给 Claude Code、Codex、Cursor 等能读取文件的 AI 工具使用。",
 		"让 AI 先阅读 `crm-assistant/SKILL.md`，再根据 `references/openapi.json` 调用 CRM 自动化接口。",
@@ -72,11 +72,11 @@ func skillPackReadme(base string) string {
 func skillMarkdown(base string) string {
 	return strings.Join([]string{
 		"---",
-		"name: ccvar-crm-assistant",
-		"description: 通过 CCVAR CRM 自动化接口做线索导入、沟通记录写入、待办查询与赢单/丢单复盘分析。",
+		"name: gcrm-assistant",
+		"description: 通过 GCRM 自动化接口做线索导入、沟通记录写入、待办查询与赢单/丢单复盘分析。",
 		"---",
 		"",
-		"# CCVAR CRM 自动化接口",
+		"# GCRM 自动化接口",
 		"",
 		"基址：`" + base + "`（以 `.env` 的 `CRM_BASE_URL` 为准）",
 		"鉴权：每个请求带 `Authorization: Bearer $CRM_API_KEY`（`ccrm_` 前缀，只读密钥拒绝写操作）。",
@@ -101,10 +101,31 @@ func skillMarkdown(base string) string {
 		"- 导入前先 `GET /api/v1/customers?q=` 查重，避免重复建档。",
 		"- 错误响应统一为 `{\"error\": \"...\"}`，HTTP 状态码对应含义。",
 		"",
+		"## 场景一：找客户（获客）",
+		"",
+		"用户给理想客户画像时，用你的联网检索能力（WebSearch/WebFetch）找潜在客户，再写回 CRM：",
+		"",
+		"1. 只取**公开来源**：企业官网、行业名录、招投标/中标公告、招聘信息、新闻、展会名单。不要抓需要登录的社媒私密数据，不要伪造。",
+		"2. 整理成 Markdown 表格给用户看：公司名｜对接人/部门｜公开联系方式｜来源链接｜为什么是潜客。",
+		"3. **等用户确认导入哪些**（关键动作，必须人拍板），再逐条建客户：",
+		"   `curl -sS -X POST \"$CRM_BASE_URL/api/v1/customers\" -H \"Authorization: Bearer $CRM_API_KEY\" -H 'Content-Type: application/json' -d '{\"name\":\"张三\",\"company\":\"某某新能源\",\"phone\":\"...\",\"source\":\"AI获客·行业名录\",\"notes\":\"线索依据 + 来源链接\"}'`",
+		"4. 导入前对每家先 `GET /api/v1/customers?q=公司名` 查重。每导入一批向用户报告结果。",
+		"",
+		"## 场景二：已有名单加工",
+		"",
+		"用户给一份名单（表格/文本），你负责清洗去重、补全（用联网检索补公司/职位/公开联系方式）、按画像打意向优先级，",
+		"再按用户确认导入。同一批里同名同公司只建一条。",
+		"",
+		"## 场景三：外联话术",
+		"",
+		"针对某个客户（先 `GET /api/v1/customers/{id}` 拉全景），写冷启动私信/邮件或多轮跟进话术。",
+		"话术只**起草**给用户，由用户去发；发送不是本接口的能力，不要假装发出去。",
+		"",
 		"## 不允许的事",
 		"",
-		"- 不要伪造沟通记录内容；导入数据必须来自用户提供的真实材料。",
-		"- 不要循环高频轮询；批量任务控制在合理节奏。",
+		"- 不要伪造客户/线索/沟通记录；导入数据必须来自真实的公开来源或用户提供的材料，注明出处。",
+		"- 写入类操作（建客户、记沟通、改阶段、完成任务）在执行前一定先向用户说明将要做什么并取得同意。",
+		"- 不要循环高频轮询或对目标站点高频抓取；控制在合理节奏。",
 		"",
 	}, "\n")
 }
@@ -126,7 +147,7 @@ func openAPIJSON(base string) string {
 	spec := map[string]any{
 		"openapi": "3.0.3",
 		"info": map[string]any{
-			"title":       "CCVAR CRM 自动化接口",
+			"title":       "GCRM 自动化接口",
 			"version":     "v1",
 			"description": "CRM 不调用 AI API；外部 AI 工具使用访问密钥调用这里的接口做线索导入、沟通写入与复盘分析。",
 		},

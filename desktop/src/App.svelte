@@ -2,309 +2,165 @@
   import { onMount } from 'svelte';
   import { invoke } from '@tauri-apps/api/core';
   import { listen } from '@tauri-apps/api/event';
-  import {
-    isPermissionGranted,
-    requestPermission,
-    sendNotification,
-  } from '@tauri-apps/plugin-notification';
+  import { open as openDialog } from '@tauri-apps/plugin-dialog';
   import { check as checkUpdate } from '@tauri-apps/plugin-updater';
   import { relaunch } from '@tauri-apps/plugin-process';
-  import Brain from './lib/Brain.svelte';
+  import Chat from './lib/Chat.svelte';
+  import Queue from './lib/Queue.svelte';
+  import Connect from './lib/Connect.svelte';
 
-  let view = $state('loading'); // loading | setup | main
-  let tab = $state('work'); // work | brain
+  let view = $state('chat'); // chat | queue
+  let convId = $state(null);
+  let convos = $state([]);
+  let setup = $state({ server: '', has_key: false, skill_dir: '', key_prefix: '' });
+  let brains = $state([]);
+  let showConnect = $state(false);
 
-  // ---------- 在线更新 ----------
+  let connected = $derived(!!(setup.server && setup.has_key));
+  let claude = $derived(brains.find((b) => b.id === 'claude'));
+  let brainReady = $derived(!!(claude && claude.found && claude.logged_in));
+
+  // 更新
   let updAvail = $state('');
   let updBusy = $state(false);
   let updMsg = $state('');
+
+  async function refreshConvos() {
+    try { convos = await invoke('list_convos'); } catch { /* */ }
+  }
+  async function refreshSetup() {
+    try { setup = await invoke('get_setup'); } catch { /* */ }
+  }
+  async function refreshBrains() {
+    try { brains = await invoke('detect_brains'); } catch { /* */ }
+  }
+
+  function newChat() { convId = null; view = 'chat'; }
+  function openConv(id) { convId = id; view = 'chat'; }
+
+  async function delConv(id, ev) {
+    ev.stopPropagation();
+    try { await invoke('delete_convo', { id }); } catch { /* */ }
+    if (convId === id) convId = null;
+    refreshConvos();
+  }
+
+  function relTime(ts) {
+    const d = new Date(ts * 1000), now = new Date();
+    const days = Math.floor((now.setHours(0,0,0,0) - new Date(ts*1000).setHours(0,0,0,0)) / 86400000);
+    if (days <= 0) return d.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' });
+    if (days === 1) return '昨天';
+    if (days < 7) return `${days} 天前`;
+    return `${d.getMonth() + 1}/${d.getDate()}`;
+  }
 
   async function silentCheckUpdate() {
     try {
       const upd = await checkUpdate();
       updAvail = upd ? upd.version : '';
-      if (upd) { try { await upd.close(); } catch { /* */ } } // 释放句柄，点击时再重新拉取
-    } catch { /* 离线 / 尚无 pilot-latest 发布：忽略 */ }
+      if (upd) { try { await upd.close(); } catch { /* */ } }
+    } catch { /* */ }
   }
-
   async function doUpdate() {
     if (updBusy) return;
-    updBusy = true;
-    updMsg = '下载中…';
+    updBusy = true; updMsg = '下载中…';
     try {
       const upd = await checkUpdate();
-      if (!upd) { updAvail = ''; updMsg = '已是最新版本'; return; }
+      if (!upd) { updAvail = ''; return; }
       let total = 0, got = 0;
       await upd.downloadAndInstall((ev) => {
         if (ev.event === 'Started') total = ev.data.contentLength ?? 0;
-        else if (ev.event === 'Progress') {
-          got += ev.data.chunkLength;
-          if (total) updMsg = `下载中 ${Math.round((got / total) * 100)}%`;
-        } else if (ev.event === 'Finished') updMsg = '安装中…';
+        else if (ev.event === 'Progress') { got += ev.data.chunkLength; if (total) updMsg = `下载 ${Math.round(got/total*100)}%`; }
+        else if (ev.event === 'Finished') updMsg = '安装中…';
       });
-      updMsg = '即将重启…';
       await relaunch();
-    } catch (e) {
-      updMsg = '更新失败：' + String(e);
-    } finally {
-      updBusy = false;
-    }
-  }
-  let server = $state('http://localhost:8090');
-  let apiKey = $state('');
-  let setupErr = $state('');
-  let saving = $state(false);
-
-  let tasks = $state([]);
-  let keyName = $state('');
-  let err = $state('');
-  let loading = $state(false);
-  let lastRefresh = $state('');
-  let notified = false; // 每次启动只提醒一次，避免骚扰
-
-  const DAY = 86400;
-  function startOfToday() {
-    const d = new Date();
-    d.setHours(0, 0, 0, 0);
-    return Math.floor(d.getTime() / 1000);
+    } catch (e) { updMsg = '更新失败'; } finally { updBusy = false; }
   }
 
-  let buckets = $derived.by(() => {
-    const st = startOfToday();
-    const et = st + DAY;
-    const b = { overdue: [], today: [], later: [] };
-    for (const t of tasks) {
-      if (t.due_at && t.due_at < st) b.overdue.push(t);
-      else if (t.due_at >= st && t.due_at < et) b.today.push(t);
-      else b.later.push(t);
-    }
-    return b;
-  });
-
-  function fmtDate(ts) {
-    if (!ts) return '未排期';
-    const d = new Date(ts * 1000);
-    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-  }
-
-  async function call(method, path, body = null) {
-    const r = await invoke('api', { method, path, body });
-    let data = {};
+  async function importPack() {
     try {
-      data = r.body ? JSON.parse(r.body) : {};
-    } catch {
-      throw new Error(`响应不是 JSON（HTTP ${r.status}）`);
-    }
-    if (r.status === 401) throw new Error(data.error || '密钥无效或已停用');
-    if (r.status >= 400) throw new Error(data.error || `HTTP ${r.status}`);
-    return data;
-  }
-
-  async function refresh() {
-    loading = true;
-    err = '';
-    try {
-      const data = await call('GET', '/api/v1/tasks');
-      tasks = data.tasks || [];
-      lastRefresh = new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' });
-      await maybeNotify();
-    } catch (e) {
-      err = e.message || String(e);
-    } finally {
-      loading = false;
-    }
-  }
-
-  async function maybeNotify() {
-    if (notified) return;
-    const n = buckets.overdue.length + buckets.today.length;
-    if (n === 0) return;
-    notified = true;
-    try {
-      let ok = await isPermissionGranted();
-      if (!ok) ok = (await requestPermission()) === 'granted';
-      if (ok) {
-        sendNotification({
-          title: 'CRM Pilot · 今日行动',
-          body: `${buckets.overdue.length} 条逾期、${buckets.today.length} 条今日到期的跟进等你处理`,
-        });
+      const path = await openDialog({ filters: [{ name: '技能包', extensions: ['zip'] }] });
+      if (!path) return;
+      const out = await invoke('import_pack', { zipPath: path, key: null });
+      if (out.status === 'needs_key') {
+        showConnect = true; // Connect 组件里会带 pendingZip 提示粘贴密钥
+        pendingZip = path;
+        pendingBase = out.api_base;
+      } else {
+        await refreshSetup();
+        showConnect = false;
       }
-    } catch {
-      /* 通知失败不影响主流程 */
-    }
+    } catch (e) { alert('导入失败：' + e); }
   }
-
-  async function done(t) {
-    try {
-      await call('POST', `/api/v1/tasks/${t.id}/done`);
-      tasks = tasks.filter((x) => x.id !== t.id);
-    } catch (e) {
-      err = e.message || String(e);
-    }
-  }
-
-  async function copyDraft(t, ev) {
-    try {
-      await navigator.clipboard.writeText(t.ai_draft);
-      const btn = ev.currentTarget;
-      const old = btn.textContent;
-      btn.textContent = '已复制 ✓';
-      setTimeout(() => (btn.textContent = old), 1500);
-    } catch {
-      err = '复制失败，请手动选择文本';
-    }
-  }
-
-  async function saveSetup() {
-    saving = true;
-    setupErr = '';
-    try {
-      await invoke('save_setup', { server, key: apiKey });
-      const ping = await call('GET', '/api/v1/ping');
-      keyName = ping.key || '';
-      apiKey = ''; // 明文用完即弃，密钥已在钥匙串
-      view = 'main';
-      await refresh();
-    } catch (e) {
-      setupErr = e.message || String(e);
-    } finally {
-      saving = false;
-    }
-  }
-
-  async function disconnect() {
-    await invoke('clear_setup');
-    tasks = [];
-    keyName = '';
-    view = 'setup';
-  }
+  let pendingZip = $state(null);
+  let pendingBase = $state('');
 
   onMount(async () => {
-    const s = await invoke('get_setup');
-    if (s.server) server = s.server;
-    if (s.has_key) {
-      view = 'main';
-      try {
-        const ping = await call('GET', '/api/v1/ping');
-        keyName = ping.key || '';
-      } catch (e) {
-        err = e.message || String(e);
-      }
-      await refresh();
-    } else {
-      view = 'setup';
-    }
-    // 工作时段每 5 分钟拉一次，到期任务弹系统通知
-    setInterval(() => {
-      if (view === 'main') refresh();
-    }, 5 * 60 * 1000);
-    // 托盘菜单「立即刷新」
-    await listen('pilot://refresh', () => {
-      if (view === 'main') {
-        tab = 'work';
-        refresh();
-      }
-    });
-    // 启动静默查一次更新，之后每 6 小时再查
+    await Promise.all([refreshConvos(), refreshSetup(), refreshBrains()]);
+    await listen('pilot://refresh', () => { view = 'queue'; });
     silentCheckUpdate();
     setInterval(silentCheckUpdate, 6 * 60 * 60 * 1000);
   });
 </script>
 
-{#snippet taskCard(t)}
-  <div class="task">
-    <div class="task-main">
-      <div class="task-title">
-        <b>{t.customer_name}</b> — {t.title}
-        {#if t.source === 'ai'}<span class="badge badge-ai">AI</span>{/if}
-        <span class="muted small">{fmtDate(t.due_at)}</span>
-      </div>
-      {#if t.detail}<div class="muted small">{t.detail}</div>{/if}
-      {#if t.ai_draft}
-        <details class="draft">
-          <summary>跟进草稿</summary>
-          <pre>{t.ai_draft}</pre>
-          <button class="btn btn-sm" onclick={(ev) => copyDraft(t, ev)}>复制草稿</button>
-        </details>
-      {/if}
-    </div>
-    <button class="btn btn-sm" onclick={() => done(t)}>完成</button>
-  </div>
-{/snippet}
-
-{#if view === 'loading'}
-  <div class="center-box muted">加载中…</div>
-{:else if view === 'setup'}
-  <div class="center-box">
-    <div class="card auth-card">
-      <h1>CRM<span class="dot">·</span>Pilot</h1>
-      <p class="muted">连接你的 CCVAR CRM。密钥只存入系统钥匙串，不落盘。</p>
-      <label>服务器地址
-        <input type="url" bind:value={server} placeholder="http://localhost:8090" />
-      </label>
-      <label>自动化密钥（在 CRM「设置 → 自动化密钥」创建）
-        <input type="password" bind:value={apiKey} placeholder="ccrm_…" />
-      </label>
-      {#if setupErr}<p class="err small">{setupErr}</p>{/if}
-      <button class="btn btn-primary btn-block" onclick={saveSetup} disabled={saving}>
-        {saving ? '连接中…' : '测试并保存'}
-      </button>
-    </div>
-  </div>
-{:else}
-  <header class="topbar" data-tauri-drag-region>
-    <span class="brand">CRM<span class="dot">·</span>Pilot</span>
-    <nav class="tabs">
-      <button class="tab" class:active={tab === 'work'} onclick={() => (tab = 'work')}>工作台</button>
-      <button class="tab" class:active={tab === 'brain'} onclick={() => (tab = 'brain')}>分析</button>
-    </nav>
-    <span class="spacer"></span>
-    {#if updAvail}
-      <button class="btn btn-sm btn-upd" onclick={doUpdate} disabled={updBusy} title={updMsg}>
-        {updBusy ? updMsg : `更新到 ${updAvail}`}
-      </button>
-    {:else if updMsg}
-      <span class="muted small">{updMsg}</span>
-    {/if}
-    {#if tab === 'work'}
-      {#if lastRefresh}<span class="muted small">更新于 {lastRefresh}</span>{/if}
-      <button class="btn btn-sm" onclick={refresh} disabled={loading}>{loading ? '刷新中…' : '刷新'}</button>
-    {/if}
-    <button class="btn btn-sm btn-ghost" onclick={disconnect}>断开</button>
-  </header>
-  <main class="content">
-    {#if err && tab === 'work'}<div class="flash flash-err">{err}</div>{/if}
-
-    <!-- Brain 常驻挂载：{#if} 切换会销毁组件，把进行中的分析流和停止按钮一起弄丢 -->
-    <div class:hidden={tab !== 'brain'}>
-      <Brain />
+<main class="app">
+  <aside class="rail">
+    <div class="rail-head" data-tauri-drag-region>
+      <button class="newchat" onclick={newChat}>＋ 新对话</button>
+      <nav class="railnav">
+        <button class:on={view === 'chat' && !convId} onclick={newChat}>对话</button>
+        <button class:on={view === 'queue'} onclick={() => (view = 'queue')} disabled={!connected} title={connected ? '' : '需连接 CRM'}>行动队列</button>
+      </nav>
     </div>
 
-    <div class:hidden={tab !== 'work'}>
-
-    {#if buckets.overdue.length}
-      <section class="card">
-        <h2 class="danger-text">已逾期（{buckets.overdue.length}）</h2>
-        {#each buckets.overdue as t (t.id)}{@render taskCard(t)}{/each}
-      </section>
-    {/if}
-
-    <section class="card">
-      <h2>今日到期{#if buckets.today.length}（{buckets.today.length}）{/if}</h2>
-      {#if buckets.today.length}
-        {#each buckets.today as t (t.id)}{@render taskCard(t)}{/each}
+    <div class="convos">
+      {#each convos as c (c.id)}
+        <button class="convo" class:on={convId === c.id && view === 'chat'} onclick={() => openConv(c.id)}>
+          <span class="ct">{c.title}</span>
+          <span class="cw">{relTime(c.updated_at)}</span>
+          <span class="cx" role="button" tabindex="-1" onclick={(e) => delConv(c.id, e)}>×</span>
+        </button>
       {:else}
-        <p class="muted">今天没有到期任务 ✓</p>
-      {/if}
-    </section>
-
-    {#if buckets.later.length}
-      <section class="card">
-        <h2 class="muted">之后 / 未排期</h2>
-        {#each buckets.later as t (t.id)}{@render taskCard(t)}{/each}
-      </section>
-    {/if}
-
+        <p class="empty muted">还没有对话</p>
+      {/each}
     </div>
-  </main>
-{/if}
+
+    <div class="rail-foot">
+      {#if updAvail}
+        <button class="updbtn" onclick={doUpdate} disabled={updBusy}>{updBusy ? updMsg : `更新到 ${updAvail}`}</button>
+      {/if}
+      <button class="connbar" onclick={() => (showConnect = true)}>
+        <span class="dot2" class:live={connected}></span>
+        <span class="cbtext">
+          {#if connected}已连接 CRM{:else}未连接 · 独立模式{/if}
+        </span>
+        <span class="cbhint">⚙</span>
+      </button>
+      {#if !brainReady}
+        <div class="warnbar">
+          {#if !claude?.found}未检测到 Claude CLI{:else if !claude?.logged_in}Claude 未登录 · <button class="link" onclick={() => invoke('open_brain_login', { brain: 'claude' })}>去授权</button>{/if}
+          <button class="link" onclick={refreshBrains}>重新检测</button>
+        </div>
+      {/if}
+    </div>
+  </aside>
+
+  <section class="main">
+    {#if view === 'queue'}
+      <Queue {connected} />
+    {:else}
+      <Chat bind:convId {connected} onchanged={refreshConvos} />
+    {/if}
+  </section>
+
+  {#if showConnect}
+    <Connect
+      {setup}
+      {pendingZip}
+      {pendingBase}
+      onclose={() => { showConnect = false; pendingZip = null; }}
+      onsaved={async () => { await refreshSetup(); showConnect = false; pendingZip = null; }}
+      onimport={importPack}
+    />
+  {/if}
+</main>

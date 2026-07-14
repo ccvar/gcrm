@@ -45,7 +45,69 @@ body {
   user-select: none;
   cursor: default;
 }
-pre, input { user-select: text; cursor: auto; }
+pre, input, textarea, .mdbody, .ubody { user-select: text; cursor: auto; }
+
+/* ---------- 双栏骨架（侧栏 + 主区，承自 GCMS Pilot） ---------- */
+.app { display: flex; height: 100vh; overflow: hidden; }
+.rail {
+  flex: none; width: 244px; display: flex; flex-direction: column;
+  background: color-mix(in srgb, var(--bg) 60%, var(--surface));
+  border-right: 1px solid var(--line);
+}
+.rail-head { padding: 2.2rem .7rem .5rem; }
+.newchat {
+  width: 100%; font: inherit; font-size: .9rem; font-weight: 500;
+  color: var(--ink); background: var(--surface);
+  border: 1px solid var(--line); border-radius: 9px; padding: .5rem; cursor: pointer;
+  transition: all .15s;
+}
+.newchat:hover { border-color: var(--accent-soft); color: var(--accent); }
+.railnav { display: flex; gap: .3rem; margin-top: .6rem; }
+.railnav button {
+  flex: 1; font: inherit; font-size: .82rem; color: var(--muted);
+  background: transparent; border: 0; border-radius: 7px; padding: .35rem; cursor: pointer;
+}
+.railnav button:hover { color: var(--accent); }
+.railnav button.on { color: var(--accent); background: var(--accent-wash); }
+.railnav button:disabled { opacity: .4; cursor: default; }
+
+.convos { flex: 1; overflow-y: auto; padding: .4rem .5rem; }
+.convo {
+  display: flex; align-items: center; gap: .4rem; width: 100%;
+  font: inherit; text-align: left; background: transparent; border: 0;
+  border-radius: 8px; padding: .45rem .55rem; cursor: pointer; color: var(--ink-soft);
+}
+.convo:hover { background: var(--line-soft); }
+.convo:hover .cx { opacity: .6; }
+.convo.on { background: var(--accent-wash); color: var(--accent); }
+.ct { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: .88rem; }
+.cw { font-size: .72rem; color: var(--faint); flex: none; }
+.cx { opacity: 0; flex: none; font-size: 1rem; line-height: 1; color: var(--muted); padding: 0 .2rem; }
+.cx:hover { color: var(--danger); }
+.empty { text-align: center; padding: 1.5rem 0; font-size: .85rem; }
+
+.rail-foot { flex: none; padding: .5rem; border-top: 1px solid var(--line); }
+.connbar {
+  display: flex; align-items: center; gap: .5rem; width: 100%;
+  font: inherit; font-size: .82rem; color: var(--ink-soft);
+  background: transparent; border: 0; border-radius: 8px; padding: .45rem .55rem; cursor: pointer;
+}
+.connbar:hover { background: var(--line-soft); }
+.dot2 { width: 7px; height: 7px; border-radius: 50%; background: var(--faint); flex: none; }
+.dot2.live { background: var(--ok); }
+.cbtext { flex: 1; text-align: left; }
+.cbhint { color: var(--faint); }
+.updbtn {
+  width: 100%; font: inherit; font-size: .8rem; color: var(--accent);
+  background: var(--accent-wash); border: 1px solid var(--accent-soft);
+  border-radius: 8px; padding: .35rem; cursor: pointer; margin-bottom: .4rem;
+}
+.warnbar { font-size: .76rem; color: var(--danger); padding: .4rem .55rem; }
+.link { font: inherit; font-size: .76rem; color: var(--accent); background: none; border: 0; cursor: pointer; padding: 0; text-decoration: underline; }
+
+.main { flex: 1; min-width: 0; display: flex; flex-direction: column; overflow: hidden; }
+.muted { color: var(--muted); }
+.small { font-size: .85em; }
 h1, h2 { font-family: var(--serif); font-weight: 600; line-height: 1.25; }
 h1 { font-size: 1.35rem; margin: 0 0 .3rem; }
 h2 { font-size: 1.02rem; margin: 0 0 .7rem; }

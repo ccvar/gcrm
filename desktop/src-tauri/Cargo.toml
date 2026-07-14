@@ -17,9 +17,14 @@ tauri = { version = "2", features = ["tray-icon"] }
 tauri-plugin-notification = "2"
 tauri-plugin-updater = "2"
 tauri-plugin-process = "2"
+tauri-plugin-dialog = "2"
+tauri-plugin-opener = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 tokio = { version = "1", features = ["process", "io-util", "time", "sync", "macros", "rt"] }
+uuid = { version = "1", features = ["v4"] }
+# 技能包导入（zip-rs/zip2，extract 自带 zip-slip 防护）
+zip = "8.6.0"
 # 密钥只进系统钥匙串（macOS Keychain / Windows 凭据管理器），绝不落盘
 keyring = { version = "3", features = ["apple-native", "windows-native"] }
 # rustls 避免 openssl 交叉编译问题

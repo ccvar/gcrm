@@ -1,18 +1,8 @@
-// 本地大脑（承自 GCMS Pilot brains.rs / agent.rs）：
-// 检测并驱动本机已登录的 claude CLI 做深度分析，跑在用户自己的订阅上，零 API 计费。
-//
-// 与 GCMS 的关键差异：分析数据由 Rust 侧先从 CRM API 拉好、嵌进 prompt——
-// 子进程不需要任何密钥（GCMS 是把密钥注入子进程 env 让 agent 自己调 API）。
-// 密钥连子进程都不进，取消时杀进程组只是防资源泄漏，不再有密钥外泄面。
-
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, Mutex};
+// 本地大脑基础设施（承自 GCMS Pilot brains.rs）：
+// CLI 检测、登录状态、去授权引导、进程组击杀。对话执行在 chat.rs。
 
 use serde::Serialize;
-use tauri::ipc::Channel;
-use tauri::{AppHandle, Manager, State};
-use tokio::io::AsyncBufReadExt;
-use tokio::sync::oneshot;
+use tauri::{AppHandle, Manager};
 
 // ---------- CLI 检测 ----------
 
@@ -52,8 +42,25 @@ fn which(bin: &str) -> Option<std::path::PathBuf> {
     None
 }
 
-fn resolve_bin(bin: &str) -> String {
+pub(crate) fn resolve_bin(bin: &str) -> String {
     which(bin).map(|p| p.to_string_lossy().into_owned()).unwrap_or_else(|| bin.to_string())
+}
+
+/// 杀整棵进程树：spawn 前已设 process_group(0)（unix，组 id == pid），
+/// kill -9 -PID 对整组 SIGKILL；Windows 用 taskkill /T 杀树。
+pub(crate) fn kill_tree(pid: Option<u32>) {
+    #[cfg(unix)]
+    if let Some(pid) = pid {
+        let _ = std::process::Command::new("kill").args(["-9", &format!("-{pid}")]).status();
+    }
+    #[cfg(windows)]
+    if let Some(pid) = pid {
+        use std::os::windows::process::CommandExt;
+        let _ = std::process::Command::new("taskkill")
+            .args(["/T", "/F", "/PID", &pid.to_string()])
+            .creation_flags(0x0800_0000)
+            .status();
+    }
 }
 
 /// 带超时的子进程捕获：stdin 关死 + kill_on_drop 防交互式 CLI 挂死检测流程；
@@ -172,7 +179,7 @@ pub fn open_brain_login(app: AppHandle, brain: String) -> Result<(), String> {
         // #!/bin/zsh -il 让脚本天然继承用户完整 PATH。
         let file = dir.join(format!("{brain}-login.command"));
         let script = format!(
-            "#!/bin/zsh -il\nclear\necho \"== CRM Pilot · {brain} 授权 ==\"\necho \"即将运行：{login_cmd}\"\necho\n{login_cmd}\necho\nif {status_cmd} 2>/dev/null | grep -qi '{marker}'; then\n  echo \"✅ 已登录，可以回到 CRM Pilot 点「重新检测」。\"\nelse\n  echo \"❌ 看起来还没登录成功，可重新运行本窗口的命令。\"\nfi\necho \"按任意键关闭窗口…\"\nread -s -k 1\n"
+            "#!/bin/zsh -il\nclear\necho \"== GCRM Pilot · {brain} 授权 ==\"\necho \"即将运行：{login_cmd}\"\necho\n{login_cmd}\necho\nif {status_cmd} 2>/dev/null | grep -qi '{marker}'; then\n  echo \"✅ 已登录，可以回到 GCRM Pilot 点「重新检测」。\"\nelse\n  echo \"❌ 看起来还没登录成功，可重新运行本窗口的命令。\"\nfi\necho \"按任意键关闭窗口…\"\nread -s -k 1\n"
         );
         std::fs::write(&file, script).map_err(|e| e.to_string())?;
         use std::os::unix::fs::PermissionsExt;
@@ -185,7 +192,7 @@ pub fn open_brain_login(app: AppHandle, brain: String) -> Result<(), String> {
         // .ps1 必须带 UTF-8 BOM，否则 PowerShell 5.1 按 ANSI 解析中文导致闪退
         let file = dir.join(format!("{brain}-login.ps1"));
         let script = format!(
-            "Write-Host '== CRM Pilot - {brain} 授权 =='\r\nWrite-Host '即将运行：{login_cmd}'\r\n{login_cmd}\r\n$out = ({status_cmd}) 2>&1 | Out-String\r\nif ($out -match '{marker}') {{ Write-Host '已登录，可以回到 CRM Pilot 点「重新检测」。' }} else {{ Write-Host '看起来还没登录成功。' }}\r\nRead-Host '按回车关闭'\r\n"
+            "Write-Host '== GCRM Pilot - {brain} 授权 =='\r\nWrite-Host '即将运行：{login_cmd}'\r\n{login_cmd}\r\n$out = ({status_cmd}) 2>&1 | Out-String\r\nif ($out -match '{marker}') {{ Write-Host '已登录，可以回到 GCRM Pilot 点「重新检测」。' }} else {{ Write-Host '看起来还没登录成功。' }}\r\nRead-Host '按回车关闭'\r\n"
         );
         let mut bytes = vec![0xEF, 0xBB, 0xBF];
         bytes.extend_from_slice(script.as_bytes());
@@ -203,305 +210,4 @@ pub fn open_brain_login(app: AppHandle, brain: String) -> Result<(), String> {
 
     let _ = marker; // 非 mac/win 平台未使用
     Ok(())
-}
-
-// ---------- 分析执行 ----------
-
-#[derive(Serialize, Clone)]
-#[serde(tag = "type", rename_all = "snake_case")]
-pub enum TurnEvent {
-    Delta { text: String },
-    Done { ok: bool, error: String },
-}
-
-struct RunHandle {
-    cancel: Arc<AtomicBool>,
-    kill_tx: Option<oneshot::Sender<()>>,
-    pid: Option<u32>,
-}
-
-/// 同一时刻只允许一个分析在跑（每个 CLI 进程吃几百 MB 内存）。
-#[derive(Default)]
-pub struct BrainRunState(Mutex<Option<RunHandle>>);
-
-/// 杀整棵进程树：spawn 前已设 process_group(0)（unix，组 id == pid），
-/// kill -9 -PID 对整组 SIGKILL；Windows 用 taskkill /T 杀树。
-pub(crate) fn kill_tree(pid: Option<u32>) {
-    #[cfg(unix)]
-    if let Some(pid) = pid {
-        let _ = std::process::Command::new("kill").args(["-9", &format!("-{pid}")]).status();
-    }
-    #[cfg(windows)]
-    if let Some(pid) = pid {
-        use std::os::windows::process::CommandExt;
-        let _ = std::process::Command::new("taskkill")
-            .args(["/T", "/F", "/PID", &pid.to_string()])
-            .creation_flags(0x0800_0000)
-            .status();
-    }
-}
-
-/// 应用退出前的清理：托盘「退出」是唯一正常退出路径，清理必须挂在那里。
-pub fn kill_running(state: &BrainRunState) {
-    if let Ok(mut guard) = state.0.lock() {
-        if let Some(h) = guard.take() {
-            h.cancel.store(true, Ordering::SeqCst);
-            kill_tree(h.pid);
-        }
-    }
-}
-
-#[tauri::command]
-pub fn cancel_analysis(state: State<'_, BrainRunState>) -> Result<(), String> {
-    let mut guard = state.0.lock().map_err(|_| "状态锁失败")?;
-    if let Some(h) = guard.as_mut() {
-        h.cancel.store(true, Ordering::SeqCst);
-        if let Some(tx) = h.kill_tx.take() {
-            let _ = tx.send(());
-        }
-        Ok(())
-    } else {
-        Err("没有进行中的分析".into())
-    }
-}
-
-/// 组装分析 prompt：数据由 Rust 拉好嵌入，子进程零密钥。
-async fn build_prompt(app: &AppHandle, kind: &str, custom: &str) -> Result<String, String> {
-    // 单个数据集截断，防 prompt 失控
-    const CAP: usize = 60_000;
-    let fetch = |path: &'static str| {
-        let app = app.clone();
-        async move {
-            let (status, body) = crate::api_request(&app, "GET", path, None).await?;
-            if status >= 400 {
-                return Err(format!("拉取 {path} 失败（HTTP {status}）"));
-            }
-            let mut b = body;
-            if b.chars().count() > CAP {
-                b = b.chars().take(CAP).collect::<String>() + "…（已截断）";
-            }
-            Ok::<String, String>(b)
-        }
-    };
-    let header = "你是一名资深销售总监，正在分析一家公司的 CRM 数据。数据以 JSON 给出，\
-时间字段是 unix 秒，金额字段 amount_cents 是分。直接输出 Markdown 报告正文，不要客套。\n\n";
-    match kind {
-        "lost_review" => {
-            let deals = fetch("/api/v1/deals").await?;
-            Ok(format!(
-                "{header}## 任务：赢单/丢单归因月报\n\n已关单商机数据（含逐单 AI 复盘）：\n```json\n{deals}\n```\n\n\
-请输出：1) 总体胜率与金额概览；2) 丢单的共性归因（按频次排序）；3) 赢单的可复制动作；\
-4) 给销售团队的 3 条最优先改进建议（具体到话术或流程节点）。"
-            ))
-        }
-        "today_focus" => {
-            let tasks = fetch("/api/v1/tasks").await?;
-            let customers = fetch("/api/v1/customers").await?;
-            Ok(format!(
-                "{header}## 任务：今日作战重点\n\n待办任务：\n```json\n{tasks}\n```\n\n客户列表（含意向评级）：\n```json\n{customers}\n```\n\n\
-请输出：1) 今天最该打的 3 个客户及理由（结合意向、阶段与任务紧迫度）；2) 每个客户的开场话术建议；\
-3) 有没有被遗漏的高意向客户（有意向但没有任何待办）。"
-            ))
-        }
-        "custom" => {
-            if custom.trim().is_empty() {
-                return Err("自定义分析需要填写问题".into());
-            }
-            let tasks = fetch("/api/v1/tasks").await?;
-            let deals = fetch("/api/v1/deals").await?;
-            let customers = fetch("/api/v1/customers").await?;
-            Ok(format!(
-                "{header}## 任务（用户提问）：{q}\n\n客户：\n```json\n{customers}\n```\n\n待办：\n```json\n{tasks}\n```\n\n已关单商机（含 AI 复盘）：\n```json\n{deals}\n```",
-                q = custom.trim()
-            ))
-        }
-        _ => Err("未知的分析类型".into()),
-    }
-}
-
-#[tauri::command]
-pub async fn run_analysis(
-    app: AppHandle,
-    state: State<'_, BrainRunState>,
-    kind: String,
-    custom: Option<String>,
-    on_event: Channel<TurnEvent>,
-) -> Result<String, String> {
-    // 占坑：同一时刻只跑一个
-    let cancel = Arc::new(AtomicBool::new(false));
-    let (kill_tx, mut kill_rx) = oneshot::channel::<()>();
-    {
-        let mut guard = state.0.lock().map_err(|_| "状态锁失败")?;
-        if guard.is_some() {
-            return Err("已有分析在进行中，请先停止".into());
-        }
-        *guard = Some(RunHandle { cancel: cancel.clone(), kill_tx: Some(kill_tx), pid: None });
-    }
-    // 无论成败都要释放坑位
-    let result = run_analysis_inner(&app, &state, &kind, custom.as_deref().unwrap_or(""), &on_event, cancel.clone(), &mut kill_rx).await;
-    if let Ok(mut guard) = state.0.lock() {
-        *guard = None;
-    }
-    match &result {
-        Ok(_) => {
-            let _ = on_event.send(TurnEvent::Done { ok: true, error: String::new() });
-        }
-        Err(e) => {
-            let msg = if cancel.load(Ordering::SeqCst) { "已停止".to_string() } else { e.clone() };
-            let _ = on_event.send(TurnEvent::Done { ok: false, error: msg });
-        }
-    }
-    result
-}
-
-async fn run_analysis_inner(
-    app: &AppHandle,
-    state: &State<'_, BrainRunState>,
-    kind: &str,
-    custom: &str,
-    on_event: &Channel<TurnEvent>,
-    cancel: Arc<AtomicBool>,
-    kill_rx: &mut oneshot::Receiver<()>,
-) -> Result<String, String> {
-    // 拉数据阶段也要能停：custom 分析顺序拉 3 个 API，最坏 90 秒，不 select 的话
-    // 「停止」要等拉取跑完才生效。
-    let prompt = tokio::select! {
-        p = build_prompt(app, kind, custom) => p?,
-        _ = &mut *kill_rx => return Err("已停止".into()),
-    };
-
-    // prompt 走 stdin 而非 argv：Windows 上 npm 装的是 claude.cmd，Rust std（CVE-2024-24576
-    // 修复后）对 .cmd 参数含换行直接拒绝；且内嵌数据的 prompt 轻松超过 32K 命令行上限。
-    let claude = resolve_bin("claude");
-    let mut cmd = tokio::process::Command::new(&claude);
-    cmd.args(["-p", "--output-format", "stream-json", "--verbose", "--include-partial-messages"])
-        .stdin(std::process::Stdio::piped())
-        .stdout(std::process::Stdio::piped())
-        .stderr(std::process::Stdio::piped())
-        .kill_on_drop(true);
-    #[cfg(unix)]
-    cmd.process_group(0); // 取消时 kill -9 -PID 才能带走整组
-    #[cfg(windows)]
-    cmd.creation_flags(0x0800_0000);
-
-    let mut child = cmd
-        .spawn()
-        .map_err(|e| format!("启动 claude 失败（确认已安装并登录）: {e}"))?;
-    let pid = child.id();
-    if let Some(mut si) = child.stdin.take() {
-        // 独立任务写入防死锁：主流程不能在读 stdout 前阻塞在写满的管道上
-        tauri::async_runtime::spawn(async move {
-            use tokio::io::AsyncWriteExt;
-            let _ = si.write_all(prompt.as_bytes()).await;
-            let _ = si.shutdown().await; // 关流，claude 才知道 prompt 结束
-        });
-    }
-    if let Ok(mut guard) = state.0.lock() {
-        if let Some(h) = guard.as_mut() {
-            h.pid = pid;
-        }
-    }
-
-    // stdout：逐行 NDJSON，token 级 text_delta 即时转发
-    let text = Arc::new(Mutex::new(String::new()));
-    let is_error = Arc::new(AtomicBool::new(false));
-    let stdout = child.stdout.take().ok_or("无法读取 stdout")?;
-    let stderr = child.stderr.take();
-    let text2 = text.clone();
-    let err2 = is_error.clone();
-    let ch = on_event.clone();
-    let reader_task = tauri::async_runtime::spawn(async move {
-        let mut reader = tokio::io::BufReader::new(stdout);
-        let mut buf = Vec::new();
-        loop {
-            buf.clear();
-            match reader.read_until(b'\n', &mut buf).await {
-                Ok(0) | Err(_) => break,
-                Ok(_) => {}
-            }
-            let line = String::from_utf8_lossy(&buf);
-            let line = line.trim();
-            if line.is_empty() {
-                continue;
-            }
-            let Ok(ev) = serde_json::from_str::<serde_json::Value>(line) else { continue };
-            match ev.get("type").and_then(|t| t.as_str()) {
-                Some("stream_event") => {
-                    let e = &ev["event"];
-                    if e.get("type").and_then(|t| t.as_str()) == Some("content_block_delta")
-                        && e["delta"].get("type").and_then(|t| t.as_str()) == Some("text_delta")
-                    {
-                        if let Some(t) = e["delta"].get("text").and_then(|t| t.as_str()) {
-                            text2.lock().unwrap().push_str(t);
-                            let _ = ch.send(TurnEvent::Delta { text: t.to_string() });
-                        }
-                    }
-                }
-                Some("result") => {
-                    if ev.get("is_error").and_then(|b| b.as_bool()).unwrap_or(false) {
-                        err2.store(true, Ordering::SeqCst);
-                    }
-                    let mut t = text2.lock().unwrap();
-                    if t.trim().is_empty() {
-                        if let Some(r) = ev.get("result").and_then(|r| r.as_str()) {
-                            t.push_str(r);
-                        }
-                    }
-                }
-                _ => {}
-            }
-        }
-    });
-    // stderr 单独攒着供错误诊断
-    let stderr_buf = Arc::new(Mutex::new(String::new()));
-    let stderr_task = stderr.map(|se| {
-        let sb = stderr_buf.clone();
-        tauri::async_runtime::spawn(async move {
-            let mut reader = tokio::io::BufReader::new(se);
-            let mut line = String::new();
-            loop {
-                line.clear();
-                match reader.read_line(&mut line).await {
-                    Ok(0) | Err(_) => break,
-                    Ok(_) => sb.lock().unwrap().push_str(&line),
-                }
-            }
-        })
-    });
-
-    // 等进程结束，或被取消时对整组 SIGKILL
-    let status = tokio::select! {
-        s = child.wait() => s.map_err(|e| e.to_string())?,
-        _ = &mut *kill_rx => {
-            kill_tree(pid);
-            let _ = child.kill().await;
-            let _ = child.wait().await;
-            // 等 reader 排空，否则残余 Delta 会在 Done 之后继续到达前端
-            let _ = reader_task.await;
-            return Err("已停止".into());
-        }
-    };
-    // 两个读取任务都要等完再取缓冲：stderr 没读完就取，错误诊断会拿到空串
-    let _ = reader_task.await;
-    if let Some(t) = stderr_task {
-        let _ = t.await;
-    }
-
-    let final_text = text.lock().unwrap().clone();
-    if cancel.load(Ordering::SeqCst) {
-        return Err("已停止".into());
-    }
-    if !status.success() || is_error.load(Ordering::SeqCst) {
-        let se = stderr_buf.lock().unwrap();
-        let last = se.lines().rev().find(|l| !l.trim().is_empty()).unwrap_or("").to_string();
-        let msg = if !last.is_empty() {
-            last
-        } else if !final_text.trim().is_empty() {
-            final_text.chars().take(300).collect()
-        } else {
-            format!("模型没有产生输出（进程退出码：{:?}）", status.code())
-        };
-        return Err(msg);
-    }
-    Ok(final_text)
 }

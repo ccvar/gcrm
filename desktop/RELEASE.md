@@ -1,4 +1,4 @@
-# CRM Pilot 发布手册
+# GCRM Pilot 发布手册
 
 ## 发一个新版本
 
@@ -11,7 +11,7 @@ git tag pilot-v0.2.1 && git push origin pilot-v0.2.1
 ```
 
 流水线（.github/workflows/pilot-release.yml）会在 macOS + Windows runner 各自原生打包，
-发布到本仓库 Release：`CRM-Pilot_<ver>_aarch64.dmg` + `CRM-Pilot_<ver>_x64-setup.exe`。
+发布到本仓库 Release：`GCRM-Pilot_<ver>_aarch64.dmg` + `GCRM-Pilot_<ver>_x64-setup.exe`。
 
 ## 在线更新（应用内自动升级）
 
@@ -40,7 +40,7 @@ updater 端点是固定滚动 tag **`pilot-latest`** 的 `latest.json` ——
 未做 Apple 公证（ad-hoc 签名），从网上下载的 dmg 首次打开会报「已损坏」，放行一次即可：
 
 ```bash
-xattr -cr "/Applications/CRM Pilot.app"
+xattr -cr "/Applications/GCRM Pilot.app"
 ```
 
 updater 安装的后续升级不带 quarantine 属性，无需再放行。

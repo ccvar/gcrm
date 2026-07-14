@@ -1,6 +1,6 @@
 #!/usr/bin/env sh
 # =============================================================================
-# CCVAR CRM —— 启停脚本（macOS / Linux，约定与 GCMS 的 cms.sh 一致）
+# GCRM —— 启停脚本（macOS / Linux，约定与 GCMS 的 cms.sh 一致）
 #
 #   用法：  ./scripts/gcrm.sh <命令>
 #   命令：  start | stop | restart | status | build | logs | pilot-build

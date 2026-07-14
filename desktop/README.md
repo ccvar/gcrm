@@ -1,4 +1,4 @@
-# CRM Pilot
+# GCRM Pilot
 
 CCVAR CRM 桌面客户端（Tauri 2 + Svelte 5），支持 **macOS 与 Windows**。
 架构承自 GCMS Pilot：密钥进系统钥匙串、Rust 侧代理请求、前端永远见不到明文。

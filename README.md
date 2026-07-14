@@ -67,9 +67,9 @@ assets/            设计令牌移植自 CMS（强调色换墨绿），零外部
 2. ✅ 技能包下载（设置页 → `crm-assistant-skillpack.zip`，SKILL.md + OpenAPI）
 3. ✅ 赢单/丢单复盘：关单自动触发 `deal_review`，「复盘」页沉淀 playbook，
    `GET /api/v1/deals` 供通道 A 做团队级归因
-4. ✅ 桌面客户端 **CRM Pilot**（[desktop/](desktop/)，Tauri 2 + Svelte 5，macOS + Windows）：
+4. ✅ 桌面客户端 **GCRM Pilot**（[desktop/](desktop/)，Tauri 2 + Svelte 5，macOS + Windows）：
    行动队列工作台 + 系统级到期通知；密钥进系统钥匙串，Rust 侧代理 API
-5. ✅ CRM Pilot 进阶：托盘常驻（关窗隐藏）、本地大脑（驱动本机 Claude Code CLI
+5. ✅ GCRM Pilot 进阶：托盘常驻（关窗隐藏）、本地大脑（驱动本机 Claude Code CLI
    做今日作战重点 / 赢单丢单归因 / 自定义分析，零 API 计费）
 6. ✅ GitHub Actions：CI（push/PR）、`v*` tag 发服务端全平台二进制、
    `pilot-v*` tag 发桌面端（macOS dmg + Windows NSIS）

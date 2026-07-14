@@ -1,4 +1,4 @@
-// CCVAR CRM —— AI 驱动的转化型 CRM，Go + SQLite 单二进制。
+// GCRM —— AI 驱动的转化型 CRM，Go + SQLite 单二进制。
 // 找客户重要，转化更重要：系统消化沟通记录，输出下一步行动。
 package main
 
@@ -52,7 +52,7 @@ func main() {
 	}()
 
 	addr := env("CRM_ADDR", ":8090")
-	log.Printf("CCVAR CRM 启动: http://localhost%s （数据库 %s）", addr, dbPath)
+	log.Printf("GCRM 启动: http://localhost%s （数据库 %s）", addr, dbPath)
 	if err := http.ListenAndServe(addr, srv.Handler()); err != nil {
 		log.Fatal(err)
 	}
