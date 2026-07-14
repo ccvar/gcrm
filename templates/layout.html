@@ -1,0 +1,37 @@
+{{define "page_head"}}<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="robots" content="noindex, nofollow">
+  <title>{{.Title}} · CCVAR CRM</title>
+  <link rel="stylesheet" href="/assets/css/admin.css?v={{.AssetVer}}">
+</head>
+<body class="admin">
+{{if .Authed}}
+<header class="admin-top">
+  <div class="wrap">
+    <a class="brand" href="/">CCVAR<span class="dot">·</span>CRM <small>转化驾驶舱</small></a>
+    <nav class="admin-nav">
+      <a href="/"{{if eq .Path "/"}} aria-current="page"{{end}}>今日行动</a>
+      <a href="/customers"{{if eq .Path "/customers"}} aria-current="page"{{end}}>客户</a>
+      <a href="/reviews"{{if eq .Path "/reviews"}} aria-current="page"{{end}}>复盘</a>
+      <a href="/settings"{{if eq .Path "/settings"}} aria-current="page"{{end}}>设置</a>
+    </nav>
+    <form method="post" action="/logout" class="logout-form">
+      <input type="hidden" name="_csrf" value="{{.CSRF}}">
+      <button type="submit" class="btn btn-ghost btn-sm">退出</button>
+    </form>
+  </div>
+</header>
+{{end}}
+<main class="wrap admin-main">
+{{if .Flash}}<div class="flash">{{.Flash}}</div>{{end}}
+{{if .Err}}<div class="flash flash-err">{{.Err}}</div>{{end}}
+{{end}}
+
+{{define "page_foot"}}
+</main>
+<script src="/assets/js/admin.js?v={{.AssetVer}}" defer></script>
+</body>
+</html>{{end}}

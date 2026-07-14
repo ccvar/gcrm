@@ -1,0 +1,34 @@
+{{define "reviews"}}{{template "page_head" .}}
+<h1>复盘</h1>
+<p class="muted">关单即复盘：AI 回溯完整沟通时间线做归因——赢单找可复制的动作，丢单找流失环节。沉淀下来就是团队自己的转化 playbook。</p>
+
+{{if .ClosedDeals}}
+{{range .ClosedDeals}}
+<section class="card review-card">
+  <div class="review-head">
+    <h2><a href="/customers/{{.CustomerID}}">{{.CustomerName}}</a> — {{.Title}}</h2>
+    <span class="badge stage-{{.Stage}}">{{stageLabel .Stage}}</span>
+    <span class="muted small">{{money .AmountCents}} · 关单于 {{fmtDate .ClosedAt}}</span>
+  </div>
+  {{if .LostReason}}<p class="muted small">销售填写的丢单原因：{{.LostReason}}</p>{{end}}
+  {{if .Review}}
+    <p class="review-body">{{.Review}}</p>
+    {{if .ReviewLessons}}
+    <div class="lessons">
+      <b class="small">Playbook 沉淀</b>
+      <pre>{{.ReviewLessons}}</pre>
+    </div>
+    {{end}}
+  {{else}}
+    <p class="muted">尚无 AI 复盘。</p>
+  {{end}}
+  <form method="post" action="/reviews/{{.ID}}/run">
+    <input type="hidden" name="_csrf" value="{{$.CSRF}}">
+    <button type="submit" class="btn btn-sm"{{if not $.AIConfigured}} disabled title="AI 未配置"{{end}}>{{if .Review}}重新复盘{{else}}生成复盘{{end}}</button>
+  </form>
+</section>
+{{end}}
+{{else}}
+<p class="muted">还没有关单的商机。在客户详情页把商机标记为「成交」或「丢单」后，复盘会出现在这里。</p>
+{{end}}
+{{template "page_foot" .}}{{end}}

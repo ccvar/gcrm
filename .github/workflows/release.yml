@@ -1,0 +1,66 @@
+name: Release
+
+# 推形如 v0.2.0 的 tag：交叉编译服务端全平台（modernc sqlite 纯 Go，CGO free），
+# 产物 + 校验直接发本仓库 Release（GCMS 用独立发布仓，gcrm 源码仓即发布仓，从简）。
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: 交叉编译并发布服务端
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.23"
+          cache: true
+
+      - name: 交叉编译全部平台
+        env:
+          VERSION: ${{ github.ref_name }}
+        run: |
+          set -e
+          rm -rf dist && mkdir -p dist
+          for target in "linux amd64" "linux arm64" "darwin amd64" "darwin arm64" "windows amd64"; do
+            set -- $target
+            goos="$1"; goarch="$2"
+            name="gcrm-${VERSION}-${goos}-${goarch}"
+            echo "::group::编译 ${goos}/${goarch}"
+            bin="gcrm"; [ "$goos" = "windows" ] && bin="gcrm.exe"
+            mkdir -p "dist/$name"
+            CGO_ENABLED=0 GOOS="$goos" GOARCH="$goarch" \
+              go build -trimpath -ldflags "-s -w" -o "dist/$name/$bin" .
+            cp README.md "dist/$name/"
+            if [ "$goos" = "windows" ]; then
+              (cd dist && zip -qr "$name.zip" "$name")
+            else
+              tar -czf "dist/$name.tar.gz" -C dist "$name"
+            fi
+            rm -rf "dist/$name"
+            echo "::endgroup::"
+          done
+          ls -lh dist/
+
+      - name: 生成 SHA256 校验文件
+        run: |
+          cd dist
+          sha256sum *.tar.gz *.zip > checksums.txt
+          cat checksums.txt
+
+      - name: 发布 Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: ${{ github.ref_name }}
+          make_latest: true
+          generate_release_notes: true
+          files: |
+            dist/*.tar.gz
+            dist/*.zip
+            dist/checksums.txt

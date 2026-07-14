@@ -1,0 +1,15 @@
+{{define "setup"}}{{template "page_head" .}}
+<div class="auth-card card">
+  <h1>初始化 CCVAR CRM</h1>
+  <p class="muted">创建管理员账号，只需要这一步。</p>
+  <form method="post" action="/setup">
+    <label>用户名
+      <input type="text" name="username" required autofocus autocomplete="username">
+    </label>
+    <label>密码（至少 8 位）
+      <input type="password" name="password" required minlength="8" autocomplete="new-password">
+    </label>
+    <button type="submit" class="btn btn-primary btn-block">创建并进入</button>
+  </form>
+</div>
+{{template "page_foot" .}}{{end}}

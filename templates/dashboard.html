@@ -1,0 +1,58 @@
+{{define "dashboard"}}{{template "page_head" .}}
+<h1>今日行动</h1>
+<div class="stats">
+  <div class="stat"><b>{{.Stats.Customers}}</b><span>客户总数</span></div>
+  <div class="stat stat-hot"><b>{{.Stats.HighIntent}}</b><span>高意向客户</span></div>
+  <div class="stat"><b>{{.Stats.OpenDeals}}</b><span>进行中商机</span></div>
+  <div class="stat"><b>{{money .Stats.OpenAmountCents}}</b><span>商机金额</span></div>
+  <div class="stat"><b>{{.Stats.OpenTasks}}</b><span>待办任务</span></div>
+</div>
+
+{{if .Overdue}}
+<section class="card">
+  <h2 class="danger-text">已逾期（{{len .Overdue}}）</h2>
+  {{range .Overdue}}{{template "task_row" (taskRow $.CSRF .)}}{{end}}
+</section>
+{{end}}
+
+<section class="card">
+  <h2>今日到期{{if .Today}}（{{len .Today}}）{{end}}</h2>
+  {{if .Today}}
+    {{range .Today}}{{template "task_row" (taskRow $.CSRF .)}}{{end}}
+  {{else}}
+    <p class="muted">今天没有到期任务。去<a href="/customers">客户列表</a>记录一条沟通，AI 会自动生成跟进建议。</p>
+  {{end}}
+</section>
+
+{{if .Later}}
+<section class="card">
+  <h2 class="muted">之后 / 未排期</h2>
+  {{range .Later}}{{template "task_row" (taskRow $.CSRF .)}}{{end}}
+</section>
+{{end}}
+{{template "page_foot" .}}{{end}}
+
+{{define "task_row"}}
+<div class="queue-item">
+  <div class="queue-main">
+    <div class="queue-title">
+      <a href="/customers/{{.T.CustomerID}}">{{.T.CustomerName}}</a> — {{.T.Title}}
+      {{if eq .T.Source "ai"}}<span class="badge badge-ai">AI</span>{{end}}
+      {{if .T.DueAt}}<span class="muted small">{{fmtDate .T.DueAt}}</span>{{end}}
+    </div>
+    {{if .T.Detail}}<div class="muted small">{{.T.Detail}}</div>{{end}}
+    {{if .T.AIDraft}}
+    <details class="draft">
+      <summary>查看跟进草稿</summary>
+      <pre>{{.T.AIDraft}}</pre>
+      <button type="button" class="btn btn-sm" data-copy>复制草稿</button>
+    </details>
+    {{end}}
+  </div>
+  <form method="post" action="/tasks/{{.T.ID}}/done" class="queue-done">
+    <input type="hidden" name="_csrf" value="{{.CSRF}}">
+    <input type="hidden" name="back" value="/">
+    <button type="submit" class="btn btn-sm">完成</button>
+  </form>
+</div>
+{{end}}

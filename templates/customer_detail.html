@@ -1,0 +1,177 @@
+{{define "customer_detail"}}{{template "page_head" .}}
+{{with .Customer}}
+<div class="page-head">
+  <h1>{{.Name}}{{if .Company}} <span class="muted h-sub">{{.Company}}</span>{{end}}</h1>
+  <form method="post" action="/customers/{{.ID}}/stage" class="stage-form">
+    <input type="hidden" name="_csrf" value="{{$.CSRF}}">
+    <select name="stage" onchange="this.form.submit()">
+      <option value="lead"{{if eq .Stage "lead"}} selected{{end}}>新线索</option>
+      <option value="contacted"{{if eq .Stage "contacted"}} selected{{end}}>已联系</option>
+      <option value="negotiating"{{if eq .Stage "negotiating"}} selected{{end}}>洽谈中</option>
+      <option value="won"{{if eq .Stage "won"}} selected{{end}}>已成交</option>
+      <option value="lost"{{if eq .Stage "lost"}} selected{{end}}>已流失</option>
+    </select>
+  </form>
+</div>
+<p class="cust-meta">
+  <span class="badge intent-{{.Intent}}">意向：{{intentLabel .Intent}}</span>
+  {{if .IntentReason}}<span class="muted small">{{.IntentReason}}</span>{{end}}
+  {{if .Phone}}<span class="muted small">📞 {{.Phone}}</span>{{end}}
+  {{if .Wechat}}<span class="muted small">💬 {{.Wechat}}</span>{{end}}
+  {{if .Source}}<span class="muted small">来源：{{.Source}}</span>{{end}}
+</p>
+{{end}}
+
+<div class="grid2">
+  <div>
+    <section class="card">
+      <h2>记录沟通</h2>
+      <form method="post" action="/customers/{{.Customer.ID}}/interactions">
+        <input type="hidden" name="_csrf" value="{{.CSRF}}">
+        <div class="row-form">
+          <label>渠道
+            <select name="channel">
+              <option value="wechat">微信</option>
+              <option value="phone">电话</option>
+              <option value="email">邮件</option>
+              <option value="meeting">见面</option>
+              <option value="other">其他</option>
+            </select>
+          </label>
+          <label>方向
+            <select name="direction">
+              <option value="out">我 → 客户</option>
+              <option value="in">客户 → 我</option>
+            </select>
+          </label>
+          <label>发生时间（默认现在）
+            <input type="datetime-local" name="occurred_at">
+          </label>
+        </div>
+        <label>内容（原文粘贴即可，AI 会自动提取要点）
+          <textarea name="content" rows="4" required placeholder="粘贴聊天记录、通话要点……"></textarea>
+        </label>
+        <button type="submit" class="btn btn-primary">记录{{if .AIConfigured}}并让 AI 分析{{end}}</button>
+        {{if not .AIConfigured}}<span class="muted small">AI 未配置，仅记录。<a href="/settings">去设置</a></span>{{end}}
+      </form>
+    </section>
+
+    <section class="card">
+      <h2>沟通时间线</h2>
+      {{if .Interactions}}
+      <div class="timeline">
+        {{range .Interactions}}
+        <div class="tl-item">
+          <div class="tl-meta">
+            <span class="badge badge-ch">{{channelLabel .Channel}}</span>
+            <span class="muted small">{{if eq .Direction "in"}}客户 → 我{{else}}我 → 客户{{end}} · {{fmtTime .OccurredAt}}</span>
+          </div>
+          {{if .AISummary}}<div class="tl-summary">{{.AISummary}}</div>{{end}}
+          <details class="tl-raw"><summary class="muted small">原文</summary><pre>{{.Content}}</pre></details>
+        </div>
+        {{end}}
+      </div>
+      {{else}}
+      <p class="muted">还没有沟通记录。</p>
+      {{end}}
+    </section>
+  </div>
+
+  <div>
+    <section class="card">
+      <h2>待办任务</h2>
+      {{range .Tasks}}
+      <div class="queue-item">
+        <div class="queue-main">
+          <div class="queue-title">{{.Title}}
+            {{if eq .Source "ai"}}<span class="badge badge-ai">AI</span>{{end}}
+            {{if .DueAt}}<span class="muted small">{{fmtDate .DueAt}}</span>{{end}}
+          </div>
+          {{if .Detail}}<div class="muted small">{{.Detail}}</div>{{end}}
+          {{if .AIDraft}}
+          <details class="draft"><summary>跟进草稿</summary><pre>{{.AIDraft}}</pre>
+            <button type="button" class="btn btn-sm" data-copy>复制草稿</button></details>
+          {{end}}
+        </div>
+        <form method="post" action="/tasks/{{.ID}}/done" class="queue-done">
+          <input type="hidden" name="_csrf" value="{{$.CSRF}}">
+          <button type="submit" class="btn btn-sm">完成</button>
+        </form>
+      </div>
+      {{else}}
+      <p class="muted">没有待办。</p>
+      {{end}}
+      <details class="sub-form">
+        <summary>手动加任务</summary>
+        <form method="post" action="/customers/{{.Customer.ID}}/tasks">
+          <input type="hidden" name="_csrf" value="{{.CSRF}}">
+          <label>标题<input type="text" name="title" required></label>
+          <label>说明<input type="text" name="detail"></label>
+          <label>截止日期<input type="date" name="due"></label>
+          <button type="submit" class="btn btn-sm">添加</button>
+        </form>
+      </details>
+    </section>
+
+    <section class="card">
+      <h2>商机</h2>
+      {{range .Deals}}
+      <div class="deal-item">
+        <div>
+          <b>{{.Title}}</b> <span class="badge stage-{{.Stage}}">{{stageLabel .Stage}}</span>
+          <div class="muted small">{{money .AmountCents}}{{if .ExpectedClose}} · 预计 {{fmtDate .ExpectedClose}}{{end}}{{if .LostReason}} · {{.LostReason}}{{end}}</div>
+        </div>
+        {{if eq .Stage "open"}}
+        <div class="deal-actions">
+          <form method="post" action="/deals/{{.ID}}/close">
+            <input type="hidden" name="_csrf" value="{{$.CSRF}}">
+            <input type="hidden" name="customer_id" value="{{.CustomerID}}">
+            <input type="hidden" name="stage" value="won">
+            <button type="submit" class="btn btn-sm btn-ok">成交</button>
+          </form>
+          <form method="post" action="/deals/{{.ID}}/close">
+            <input type="hidden" name="_csrf" value="{{$.CSRF}}">
+            <input type="hidden" name="customer_id" value="{{.CustomerID}}">
+            <input type="hidden" name="stage" value="lost">
+            <input type="text" name="lost_reason" placeholder="丢单原因" class="inline-input">
+            <button type="submit" class="btn btn-sm btn-danger">丢单</button>
+          </form>
+        </div>
+        {{end}}
+      </div>
+      {{else}}
+      <p class="muted">还没有商机。</p>
+      {{end}}
+      <details class="sub-form">
+        <summary>新建商机</summary>
+        <form method="post" action="/customers/{{.Customer.ID}}/deals">
+          <input type="hidden" name="_csrf" value="{{.CSRF}}">
+          <label>名称<input type="text" name="title" required></label>
+          <label>金额（元）<input type="number" name="amount" min="0" step="0.01"></label>
+          <label>预计成交日<input type="date" name="expected"></label>
+          <button type="submit" class="btn btn-sm">创建</button>
+        </form>
+      </details>
+    </section>
+
+    <section class="card">
+      <details class="sub-form">
+        <summary>编辑客户资料</summary>
+        {{with .Customer}}
+        <form method="post" action="/customers/{{.ID}}/profile">
+          <input type="hidden" name="_csrf" value="{{$.CSRF}}">
+          <label>姓名<input type="text" name="name" value="{{.Name}}" required></label>
+          <label>公司<input type="text" name="company" value="{{.Company}}"></label>
+          <label>电话<input type="text" name="phone" value="{{.Phone}}"></label>
+          <label>微信<input type="text" name="wechat" value="{{.Wechat}}"></label>
+          <label>邮箱<input type="email" name="email" value="{{.Email}}"></label>
+          <label>来源<input type="text" name="source" value="{{.Source}}"></label>
+          <label>备注<textarea name="notes" rows="3">{{.Notes}}</textarea></label>
+          <button type="submit" class="btn btn-sm">保存</button>
+        </form>
+        {{end}}
+      </details>
+    </section>
+  </div>
+</div>
+{{template "page_foot" .}}{{end}}

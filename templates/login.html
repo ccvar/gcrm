@@ -1,0 +1,15 @@
+{{define "login"}}{{template "page_head" .}}
+<div class="auth-card card">
+  <h1>CCVAR<span class="dot">·</span>CRM</h1>
+  <p class="muted">转化驾驶舱</p>
+  <form method="post" action="/login">
+    <label>用户名
+      <input type="text" name="username" required autofocus autocomplete="username">
+    </label>
+    <label>密码
+      <input type="password" name="password" required autocomplete="current-password">
+    </label>
+    <button type="submit" class="btn btn-primary btn-block">登录</button>
+  </form>
+</div>
+{{template "page_foot" .}}{{end}}

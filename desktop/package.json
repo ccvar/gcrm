@@ -1,0 +1,24 @@
+{
+  "name": "crm-pilot",
+  "private": true,
+  "version": "0.1.0",
+  "description": "CCVAR CRM 转化驾驶舱桌面端",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "tauri": "tauri"
+  },
+  "license": "MIT",
+  "dependencies": {
+    "@tauri-apps/api": "^2",
+    "@tauri-apps/plugin-notification": "^2"
+  },
+  "devDependencies": {
+    "@sveltejs/vite-plugin-svelte": "^5.0.0",
+    "@tauri-apps/cli": "^2",
+    "svelte": "^5.0.0",
+    "vite": "^6.0.0"
+  }
+}

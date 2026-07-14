@@ -1,0 +1,20 @@
+# 运行数据（本地库、上传件）
+data/
+*.db
+*.db-shm
+*.db-wal
+
+# 构建产物
+bin/
+dist/
+crm.ccvar.com
+
+# 桌面端（desktop/.gitignore 另有细化）
+desktop/node_modules/
+desktop/dist/
+desktop/src-tauri/target/
+desktop/src-tauri/gen/
+
+# 系统与编辑器
+.DS_Store
+.claude/settings.local.json

@@ -1,0 +1,24 @@
+[package]
+name = "crm-pilot"
+version = "0.1.0"
+description = "CCVAR CRM 转化驾驶舱桌面端"
+edition = "2021"
+license = "MIT"
+
+[lib]
+name = "crm_pilot_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = ["tray-icon"] }
+tauri-plugin-notification = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tokio = { version = "1", features = ["process", "io-util", "time", "sync", "macros", "rt"] }
+# 密钥只进系统钥匙串（macOS Keychain / Windows 凭据管理器），绝不落盘
+keyring = { version = "3", features = ["apple-native", "windows-native"] }
+# rustls 避免 openssl 交叉编译问题
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }

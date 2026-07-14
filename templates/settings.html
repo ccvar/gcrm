@@ -1,0 +1,72 @@
+{{define "settings"}}{{template "page_head" .}}
+<h1>设置</h1>
+
+<section class="card">
+  <h2>AI 模型（通道 B：CRM 内嵌调用）</h2>
+  <p class="muted small">OpenAI 兼容端点均可：DeepSeek <code>https://api.deepseek.com/v1</code>、Kimi <code>https://api.moonshot.cn/v1</code>、通义 <code>https://dashscope.aliyuncs.com/compatible-mode/v1</code> 等。配置后，每条沟通记录会自动提取意向、异议并生成跟进草稿。</p>
+  <form method="post" action="/settings/ai" class="grid-form">
+    <input type="hidden" name="_csrf" value="{{.CSRF}}">
+    <label>API 端点（Base URL）<input type="url" name="base_url" value="{{.AIBaseURL}}" placeholder="https://api.deepseek.com/v1"></label>
+    <label>模型名<input type="text" name="model" value="{{.AIModel}}" placeholder="deepseek-chat"></label>
+    <label class="span2">API Key {{if .AIKeySet}}<span class="ok-text small">已设置（留空则不修改）</span>{{end}}
+      <input type="password" name="api_key" placeholder="{{if .AIKeySet}}••••••••{{else}}sk-…{{end}}" autocomplete="off">
+    </label>
+    {{if .AIKeySet}}<label class="span2 check-label"><input type="checkbox" name="clear_key" value="1"> 清除已保存的 API Key</label>{{end}}
+    <div class="span2">
+      <button type="submit" class="btn btn-primary">保存</button>
+      {{if .AIConfigured}}<span class="ok-text small">● AI 已启用</span>{{else}}<span class="muted small">○ 未启用（端点与模型名必填）</span>{{end}}
+    </div>
+  </form>
+</section>
+
+<section class="card">
+  <h2>自动化密钥（通道 A：外部 AI 工具接入）</h2>
+  <p class="muted small">Claude Code / Codex 等工具持 <code>ccrm_</code> 密钥调用自动化接口（<code>/api/v1/…</code>）做批量导入、复盘分析。明文只显示一次，请立即保存。</p>
+  <p class="small"><a href="/settings/skillpack.zip">⬇ 下载技能包（SKILL.md + OpenAPI）</a> <span class="muted">—— 解压后交给 AI 工具阅读，密钥自行填入 .env</span></p>
+
+  {{if .NewKeySecret}}
+  <div class="key-secret">
+    <b>新密钥已创建，明文只显示这一次：</b>
+    <pre>{{.NewKeySecret}}</pre>
+    <button type="button" class="btn btn-sm" data-copy>复制</button>
+  </div>
+  {{end}}
+
+  <form method="post" action="/settings/keys" class="row-form">
+    <input type="hidden" name="_csrf" value="{{.CSRF}}">
+    <label>名称<input type="text" name="name" placeholder="如：Claude Code 复盘"></label>
+    <label>权限
+      <select name="scopes">
+        <option value="read,write">读写</option>
+        <option value="read">只读</option>
+      </select>
+    </label>
+    <button type="submit" class="btn btn-primary">创建密钥</button>
+  </form>
+
+  {{if .Keys}}
+  <table class="tbl">
+    <thead><tr><th>名称</th><th>前缀</th><th>权限</th><th>状态</th><th>最近使用</th><th></th></tr></thead>
+    <tbody>
+      {{range .Keys}}
+      <tr>
+        <td>{{.Name}}</td>
+        <td><code>{{.Prefix}}…</code></td>
+        <td>{{.Scopes}}</td>
+        <td>{{if eq .Status "enabled"}}<span class="ok-text">启用</span>{{else}}<span class="muted">已停用</span>{{end}}</td>
+        <td class="muted small">{{fmtTime .LastUsedAt}}</td>
+        <td>
+          {{if eq .Status "enabled"}}
+          <form method="post" action="/settings/keys/{{.ID}}/disable" onsubmit="return confirm('停用后该密钥立即失效，确定？')">
+            <input type="hidden" name="_csrf" value="{{$.CSRF}}">
+            <button type="submit" class="btn btn-sm btn-danger">停用</button>
+          </form>
+          {{end}}
+        </td>
+      </tr>
+      {{end}}
+    </tbody>
+  </table>
+  {{end}}
+</section>
+{{template "page_foot" .}}{{end}}

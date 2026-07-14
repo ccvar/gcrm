@@ -1,0 +1,45 @@
+{{define "customers"}}{{template "page_head" .}}
+<div class="page-head">
+  <h1>客户</h1>
+  <form method="get" action="/customers" class="search-form">
+    <input type="search" name="q" value="{{.Query}}" placeholder="搜姓名 / 公司 / 电话 / 微信">
+    <button type="submit" class="btn btn-sm">搜索</button>
+  </form>
+</div>
+
+<details class="card create-card"{{if not .Customers}} open{{end}}>
+  <summary>新增客户</summary>
+  <form method="post" action="/customers" class="grid-form">
+    <input type="hidden" name="_csrf" value="{{.CSRF}}">
+    <label>姓名 *<input type="text" name="name" required></label>
+    <label>公司<input type="text" name="company"></label>
+    <label>电话<input type="text" name="phone"></label>
+    <label>微信<input type="text" name="wechat"></label>
+    <label>邮箱<input type="email" name="email"></label>
+    <label>来源<input type="text" name="source" placeholder="如：官网表单 / 转介绍 / 展会"></label>
+    <label class="span2">备注<textarea name="notes" rows="2"></textarea></label>
+    <div class="span2"><button type="submit" class="btn btn-primary">创建客户</button></div>
+  </form>
+</details>
+
+{{if .Customers}}
+<div class="card table-card">
+  <table class="tbl">
+    <thead><tr><th>客户</th><th>阶段</th><th>意向</th><th>来源</th><th>最近更新</th></tr></thead>
+    <tbody>
+      {{range .Customers}}
+      <tr>
+        <td><a href="/customers/{{.ID}}"><b>{{.Name}}</b></a>{{if .Company}} <span class="muted">{{.Company}}</span>{{end}}</td>
+        <td><span class="badge stage-{{.Stage}}">{{stageLabel .Stage}}</span></td>
+        <td><span class="badge intent-{{.Intent}}" {{if .IntentReason}}title="{{.IntentReason}}"{{end}}>{{intentLabel .Intent}}</span></td>
+        <td class="muted">{{.Source}}</td>
+        <td class="muted small">{{fmtTime .UpdatedAt}}</td>
+      </tr>
+      {{end}}
+    </tbody>
+  </table>
+</div>
+{{else}}
+<p class="muted">{{if .Query}}没有匹配「{{.Query}}」的客户。{{else}}还没有客户，先建一个。{{end}}</p>
+{{end}}
+{{template "page_foot" .}}{{end}}

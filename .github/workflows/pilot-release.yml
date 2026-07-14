@@ -1,0 +1,99 @@
+name: Pilot Release
+
+# 推形如 pilot-v0.2.0 的 tag：macOS（aarch64 dmg）+ Windows（NSIS exe）各自原生打包，
+# 一起发到本仓库 Release。未接 tauri updater，无需 ed25519 更新签名（对齐 GCMS 冻结方案的 v0 阶段）。
+on:
+  push:
+    tags:
+      - "pilot-v*"
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: 构建 ${{ matrix.platform }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-latest
+            target: aarch64-apple-darwin
+            bundles: app,dmg
+            platform: darwin-aarch64
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            bundles: nsis
+            platform: windows-x86_64
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        working-directory: desktop
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: desktop/package-lock.json
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: desktop/src-tauri
+
+      - name: 安装前端依赖
+        run: npm ci
+
+      - name: 构建
+        run: npm run tauri build -- --target ${{ matrix.target }} --bundles ${{ matrix.bundles }}
+
+      - name: 收集产物
+        shell: bash
+        env:
+          VERSION: ${{ github.ref_name }}
+          PLATFORM: ${{ matrix.platform }}
+          TARGET: ${{ matrix.target }}
+        run: |
+          set -e
+          ver="${VERSION#pilot-v}"
+          bundle="src-tauri/target/${TARGET}/release/bundle"
+          out="$GITHUB_WORKSPACE/dist"
+          rm -rf "$out"; mkdir -p "$out"
+          if [ "$PLATFORM" = "darwin-aarch64" ]; then
+            cp "$(ls "$bundle"/dmg/*.dmg | head -1)" "$out/CRM-Pilot_${ver}_aarch64.dmg"
+          else
+            cp "$(ls "$bundle"/nsis/*-setup.exe | head -1)" "$out/CRM-Pilot_${ver}_x64-setup.exe"
+          fi
+          ls -lh "$out"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist-${{ matrix.platform }}
+          path: dist/
+          retention-days: 1
+
+  publish:
+    name: 发布 Release（两平台一起）
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: all
+          merge-multiple: true
+
+      - name: 发布
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: ${{ github.ref_name }}
+          make_latest: false
+          files: |
+            all/*
