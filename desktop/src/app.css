@@ -95,6 +95,8 @@ pre, input, textarea, .mdbody, .ubody { user-select: text; cursor: auto; }
 .navitem.primary:hover { color: var(--accent); }
 .navitem:disabled { opacity: .4; cursor: default; }
 .navitem:disabled:hover { background: transparent; color: var(--ink-soft); }
+.navitem span:first-of-type { flex: 1; }
+.nbadge { font-size: .7rem; font-weight: 600; color: var(--accent); background: var(--accent-wash); padding: 0 .4rem; border-radius: 999px; }
 
 .convos { flex: 1; overflow-y: auto; padding: .5rem .5rem 1rem; }
 

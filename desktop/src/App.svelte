@@ -8,10 +8,12 @@
   import { relaunch } from '@tauri-apps/plugin-process';
   import Chat from './lib/Chat.svelte';
   import Queue from './lib/Queue.svelte';
+  import Pool from './lib/Pool.svelte';
   import Settings from './lib/Settings.svelte';
   import { loadPrefs, savePrefs } from './lib/prefs.js';
 
-  let view = $state('chat'); // chat | queue
+  let view = $state('chat'); // chat | queue | pool
+  let leadCount = $state(0);
   let convId = $state(null);
   let convos = $state([]);
   let setup = $state({ server: '', has_key: false, skill_dir: '', key_prefix: '' });
@@ -73,6 +75,14 @@
   }
   async function refreshBrains() {
     try { brains = await invoke('detect_brains'); } catch { /* */ }
+  }
+  async function refreshLeadCount() {
+    try { leadCount = (await invoke('list_leads')).length; } catch { /* */ }
+  }
+  // 对话里入池后：刷新计数；第二参数 goPool=true 时切到客户池视图
+  function onPooled(_n, goPool) {
+    refreshLeadCount();
+    if (goPool) view = 'pool';
   }
 
   function newChat() { convId = null; view = 'chat'; }
@@ -166,7 +176,7 @@
   let pendingBase = $state('');
 
   onMount(async () => {
-    await Promise.all([refreshConvos(), refreshSetup(), refreshBrains()]);
+    await Promise.all([refreshConvos(), refreshSetup(), refreshBrains(), refreshLeadCount()]);
     await listen('pilot://refresh', () => { view = 'queue'; });
     silentCheckUpdate();
     setInterval(silentCheckUpdate, 6 * 60 * 60 * 1000);
@@ -185,6 +195,9 @@
     <div class="rail-head" data-tauri-drag-region>
       <button class="navitem primary" onclick={newChat}>
         {@render icoPencil()}<span>新对话</span>
+      </button>
+      <button class="navitem" class:on={view === 'pool'} onclick={() => (view = 'pool')}>
+        {@render icoPool()}<span>客户池</span>{#if leadCount}<span class="nbadge">{leadCount}</span>{/if}
       </button>
       <button class="navitem" class:on={view === 'queue'} onclick={() => connected && (view = 'queue')} disabled={!connected} title={connected ? '' : '需连接 CRM'}>
         {@render icoQueue()}<span>行动队列</span>
@@ -238,8 +251,10 @@
   <section class="main">
     {#if view === 'queue'}
       <Queue {connected} />
+    {:else if view === 'pool'}
+      <Pool {connected} onchanged={refreshLeadCount} />
     {:else}
-      <Chat bind:convId {connected} customModels={prefs.customClaudeIds} onchanged={refreshConvos} />
+      <Chat bind:convId {connected} customModels={prefs.customClaudeIds} onchanged={refreshConvos} onpooled={onPooled} />
     {/if}
   </section>
 
@@ -288,6 +303,7 @@
 {#snippet icoSearch()}<svg viewBox="0 0 24 24" class="ico"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>{/snippet}
 {#snippet icoPencil()}<svg viewBox="0 0 24 24" class="ico"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>{/snippet}
 {#snippet icoQueue()}<svg viewBox="0 0 24 24" class="ico"><path d="M9 6h11"/><path d="M9 12h11"/><path d="M9 18h11"/><path d="M4.5 6h.01"/><path d="M4.5 12h.01"/><path d="M4.5 18h.01"/></svg>{/snippet}
+{#snippet icoPool()}<svg viewBox="0 0 24 24" class="ico"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>{/snippet}
 {#snippet icoChevron()}<svg viewBox="0 0 24 24" class="ico"><path d="m9 18 6-6-6-6"/></svg>{/snippet}
 {#snippet groupIcon(key)}
   {#if key === 'prospect'}<svg viewBox="0 0 24 24" class="ico"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>

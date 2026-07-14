@@ -10,6 +10,7 @@ mod chat;
 mod convo;
 mod pack;
 mod path_env;
+mod pool;
 
 use std::fs;
 use std::path::PathBuf;
@@ -256,7 +257,12 @@ pub fn run() {
             chat::delete_convo,
             chat::send_chat,
             chat::cancel_chat,
-            pack::import_pack
+            pack::import_pack,
+            pool::list_leads,
+            pool::add_leads,
+            pool::update_lead_status,
+            pool::delete_lead,
+            pool::push_lead
         ])
         .setup(|app| {
             setup_tray(app.handle())?;

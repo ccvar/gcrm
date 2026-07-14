@@ -2,7 +2,7 @@
   import { invoke, Channel } from '@tauri-apps/api/core';
   import { openUrl } from '@tauri-apps/plugin-opener';
   import { getCurrentWindow } from '@tauri-apps/api/window';
-  import { mdRender, mdClick } from './md.js';
+  import { mdRender, mdClick, extractLeads, stripLeadsLive } from './md.js';
   import ModelChip from './ModelChip.svelte';
   import { loadPrefs, savePrefs } from './prefs.js';
 
@@ -17,7 +17,18 @@
     connected = false,
     customModels = [], // 设置里配置的自定义模型 ID
     onchanged = () => {}, // 会话增改后通知父组件刷新侧栏
+    onpooled = () => {}, // 线索入池后通知父组件（刷新客户池）
   } = $props();
+
+  let pooledTs = $state(new Map()); // 消息 ts → 实际新增条数（去重后），避免重复入池
+
+  async function addToPool(leads, ts) {
+    try {
+      const n = await invoke('add_leads', { leads });
+      pooledTs = new Map(pooledTs).set(ts, n);
+      onpooled(n);
+    } catch (e) { err = String(e); }
+  }
 
   let conv = $state(null); // 当前会话完整对象
   let running = $state(false);
@@ -186,8 +197,19 @@
             {#if m.error}
               <div class="errbody">{m.text}</div>
             {:else}
-              <div class="mdbody" role="presentation" onclick={(e) => mdClick(e, openUrl)}>{@html mdRender(m.text)}</div>
-              {#if m.text}<button class="mini" onclick={(e) => copyText(m.text, e)}>复制</button>{/if}
+              {@const parsed = extractLeads(m.text)}
+              <div class="mdbody" role="presentation" onclick={(e) => mdClick(e, openUrl)}>{@html mdRender(parsed.clean)}</div>
+              {#if parsed.leads.length}
+                <div class="pool-cta">
+                  {#if pooledTs.has(m.ts)}
+                    {@const n = pooledTs.get(m.ts)}
+                    <span class="pooled">{n > 0 ? `✓ 已入池 ${n} 条` : '这些都已在池中'} · <button class="linkbtn" onclick={() => onpooled(0, true)}>去客户池</button></span>
+                  {:else}
+                    <button class="btn-pool" onclick={() => addToPool(parsed.leads, m.ts)}>＋ 全部入池（{parsed.leads.length}）</button>
+                  {/if}
+                </div>
+              {/if}
+              {#if parsed.clean}<button class="mini" onclick={(e) => copyText(parsed.clean, e)}>复制</button>{/if}
             {/if}
           </div>
         {/if}
@@ -204,7 +226,7 @@
               {#each liveTools as t}<div class="tool"><span class="tlabel">{t.label}</span><code>{t.detail}</code></div>{/each}
             </details>
           {/if}
-          {#if liveText}<div class="mdbody">{@html mdRender(liveText)}</div>{/if}
+          {#if liveText}<div class="mdbody">{@html mdRender(stripLeadsLive(liveText))}</div>{/if}
           <span class="working">思考中…</span>
         </div>
       {/if}
@@ -272,6 +294,11 @@
   .working { font-size: .82rem; color: var(--muted); }
   .mini { font-size: .75rem; color: var(--muted); background: none; border: 0; cursor: pointer; padding: .2rem 0; }
   .mini:hover { color: var(--accent); }
+  .pool-cta { margin: .5rem 0 .2rem; }
+  .btn-pool { font: inherit; font-size: .85rem; font-weight: 500; color: #fff; background: var(--accent); border: 0; border-radius: 8px; padding: .4rem .9rem; cursor: pointer; }
+  .btn-pool:hover { background: var(--accent-soft); }
+  .pooled { font-size: .84rem; color: var(--ok); }
+  .linkbtn { font: inherit; font-size: .84rem; color: var(--accent); background: none; border: 0; cursor: pointer; text-decoration: underline; padding: 0; }
 
   .composer { flex: none; border-top: 1px solid var(--line); background: var(--surface); padding: .7rem 1.5rem 1rem; }
   .composer textarea { width: 100%; max-width: 760px; margin: 0 auto; display: block; resize: none; border: 1px solid var(--line); border-radius: 10px; padding: .6rem .8rem; font: inherit; background: var(--bg); color: var(--ink); max-height: 200px; }
