@@ -54,6 +54,35 @@
     return `${d.getMonth() + 1}/${d.getDate()}`;
   }
 
+  // 会话按任务类型分组（对应 GCMS 的按站点分组），每组可折叠
+  const TASK_META = {
+    prospect: '找客户', focus: '今日作战', review: '复盘归因', free: '自由对话',
+  };
+  function loadCollapsed() {
+    try { return new Set(JSON.parse(localStorage.getItem('gcrm.pilot.collapsed') || '[]')); } catch { return new Set(); }
+  }
+  let collapsed = $state(loadCollapsed());
+  function toggleGroup(key) {
+    const s = new Set(collapsed);
+    s.has(key) ? s.delete(key) : s.add(key);
+    collapsed = s;
+    try { localStorage.setItem('gcrm.pilot.collapsed', JSON.stringify([...s])); } catch { /* */ }
+  }
+  let grouped = $derived.by(() => {
+    const map = new Map();
+    for (const c of convos) {
+      const key = TASK_META[c.task_type] ? c.task_type : 'free';
+      if (!map.has(key)) map.set(key, { key, label: TASK_META[key], items: [], recent: 0 });
+      const g = map.get(key);
+      g.items.push(c);
+      if (c.updated_at > g.recent) g.recent = c.updated_at;
+    }
+    const groups = [...map.values()];
+    for (const g of groups) g.items.sort((a, b) => b.updated_at - a.updated_at);
+    groups.sort((a, b) => b.recent - a.recent); // 最近活动的组在上（同 GCMS）
+    return groups;
+  });
+
   async function silentCheckUpdate() {
     try {
       const upd = await checkUpdate();
@@ -106,20 +135,32 @@
 <main class="app">
   <aside class="rail">
     <div class="rail-head" data-tauri-drag-region>
-      <button class="newchat" onclick={newChat}>＋ 新对话</button>
-      <nav class="railnav">
-        <button class:on={view === 'chat' && !convId} onclick={newChat}>对话</button>
-        <button class:on={view === 'queue'} onclick={() => (view = 'queue')} disabled={!connected} title={connected ? '' : '需连接 CRM'}>行动队列</button>
-      </nav>
+      <button class="navitem primary" onclick={newChat}>
+        {@render icoPencil()}<span>新对话</span>
+      </button>
+      <button class="navitem" class:on={view === 'queue'} onclick={() => connected && (view = 'queue')} disabled={!connected} title={connected ? '' : '需连接 CRM'}>
+        {@render icoQueue()}<span>行动队列</span>
+      </button>
     </div>
 
     <div class="convos">
-      {#each convos as c (c.id)}
-        <button class="convo" class:on={convId === c.id && view === 'chat'} onclick={() => openConv(c.id)}>
-          <span class="ct">{c.title}</span>
-          <span class="cw">{relTime(c.updated_at)}</span>
-          <span class="cx" role="button" tabindex="-1" onclick={(e) => delConv(c.id, e)}>×</span>
+      {#each grouped as g (g.key)}
+        <button class="grp" onclick={() => toggleGroup(g.key)}>
+          <span class="chev" class:col={collapsed.has(g.key)}>{@render icoChevron()}</span>
+          <span class="grp-ico g-{g.key}">{@render groupIcon(g.key)}</span>
+          <span class="grp-name">{g.label}</span>
+          <span class="grp-n">{g.items.length}</span>
         </button>
+        {#if !collapsed.has(g.key)}
+          {#each g.items as c (c.id)}
+            <button class="convo" class:on={convId === c.id && view === 'chat'} onclick={() => openConv(c.id)}>
+              <span class="cdot g-{c.task_type}"></span>
+              <span class="ct">{c.title}</span>
+              <span class="cw">{relTime(c.updated_at)}</span>
+              <span class="cx" role="button" tabindex="-1" onclick={(e) => delConv(c.id, e)}>×</span>
+            </button>
+          {/each}
+        {/if}
       {:else}
         <p class="empty muted">还没有对话</p>
       {/each}
@@ -164,3 +205,13 @@
     />
   {/if}
 </main>
+
+{#snippet icoPencil()}<svg viewBox="0 0 24 24" class="ico"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>{/snippet}
+{#snippet icoQueue()}<svg viewBox="0 0 24 24" class="ico"><path d="M9 6h11"/><path d="M9 12h11"/><path d="M9 18h11"/><path d="M4.5 6h.01"/><path d="M4.5 12h.01"/><path d="M4.5 18h.01"/></svg>{/snippet}
+{#snippet icoChevron()}<svg viewBox="0 0 24 24" class="ico"><path d="m9 18 6-6-6-6"/></svg>{/snippet}
+{#snippet groupIcon(key)}
+  {#if key === 'prospect'}<svg viewBox="0 0 24 24" class="ico"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
+  {:else if key === 'focus'}<svg viewBox="0 0 24 24" class="ico"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3"/></svg>
+  {:else if key === 'review'}<svg viewBox="0 0 24 24" class="ico"><path d="M3 3v18h18"/><path d="m7 14 4-4 3 3 5-6"/></svg>
+  {:else}<svg viewBox="0 0 24 24" class="ico"><path d="M21 15a2 2 0 0 1-2 2H8l-5 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2Z"/></svg>{/if}
+{/snippet}
