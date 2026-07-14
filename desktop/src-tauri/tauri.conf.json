@@ -1,7 +1,7 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "CRM Pilot",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "identifier": "com.ccvar.crm.pilot",
   "build": {
     "beforeDevCommand": "npm run dev",
@@ -25,7 +25,11 @@
   },
   "bundle": {
     "active": true,
-    "targets": ["app", "dmg", "nsis"],
+    "targets": [
+      "app",
+      "dmg",
+      "nsis"
+    ],
     "category": "Business",
     "shortDescription": "CCVAR CRM 转化驾驶舱桌面端",
     "macOS": {
@@ -34,7 +38,10 @@
     },
     "windows": {
       "nsis": {
-        "languages": ["SimpChinese", "English"]
+        "languages": [
+          "SimpChinese",
+          "English"
+        ]
       }
     },
     "icon": [
