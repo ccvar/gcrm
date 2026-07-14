@@ -66,9 +66,14 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ""
         run: |
           if [ -z "$TAURI_SIGNING_PRIVATE_KEY" ]; then
+            # conf 里 createUpdaterArtifacts+pubkey 已就位时，缺私钥会让 tauri build 直接报错，
+            # 必须用 --config 覆盖关掉更新工件才能降级出普通安装包
             echo "::warning::未配置 TAURI_SIGNING_PRIVATE_KEY，本次发布不含在线更新工件（应用内不会提示更新）。"
+            printf '{"bundle":{"createUpdaterArtifacts":false}}' > "$RUNNER_TEMP/no-updater.json"
+            npm run tauri build -- --target ${{ matrix.target }} --bundles ${{ matrix.bundles }} --config "$RUNNER_TEMP/no-updater.json"
+          else
+            npm run tauri build -- --target ${{ matrix.target }} --bundles ${{ matrix.bundles }}
           fi
-          npm run tauri build -- --target ${{ matrix.target }} --bundles ${{ matrix.bundles }}
 
       - name: 收集产物 + 更新片段
         shell: bash
